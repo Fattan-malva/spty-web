@@ -98,7 +98,6 @@ async def get_track_metadata(app, track_id: str, sp_dc: str):
     oembed_thumb = None
     oembed_title = "Unknown"
     oembed_artist = ""
-
     try:
         response = await app.state.http.get(
             f"https://open.spotify.com/oembed?url=https://open.spotify.com/track/{tid}",
@@ -211,7 +210,7 @@ async def get_embed_html(app, track_id: str, sp_dc: str) -> HTMLResponse:
         raise HTTPException(status_code=502, detail=f"Embed fetch {response.status_code}")
 
     html = response.text
-    bridge_tag = '<script src="/static/spotify-embed-bridge.js?v=ended-20260916"></script>'
+    bridge_tag = '<script src="/static/spotify-embed-bridge.js?v=ended-20260916c"></script>'
     if "</head>" in html:
         html = html.replace(
             "</head>",
