@@ -1,7 +1,7 @@
 import asyncio
 
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import HTTPException
 from fastapi.responses import HTMLResponse
 
 from . import config, locks, spotify
@@ -174,7 +174,6 @@ async def get_lyrics(app, track_id: str, sp_dc: str) -> dict:
 
     payload = await spotify.fetch_spotify_lyrics(app, tid, sp_dc)
     if not payload or not payload.get("lines"):
-        # Cache negative result briefly to avoid hammering upstream.
         cache_put(config.LYRICS_CACHE, tid,
                   {"data": {"trackId": tid, "syncType": "NONE",
                             "hasSync": False, "lines": [], "provider": None},
@@ -188,6 +187,13 @@ async def get_lyrics(app, track_id: str, sp_dc: str) -> dict:
 
 
 async def get_embed_html(app, track_id: str, sp_dc: str) -> HTMLResponse:
+    """Return Spotify's existing embed HTML with a same-origin playback-event bridge injected.
+
+    The bridge runs inside the proxied embed document, where it can observe messages from
+    Spotify's own player and forward playback events to our player.html parent window.
+    This preserves the existing authenticated embed instead of replacing it with a new
+    client-side embed implementation.
+    """
     tid = sanitize_track_id(track_id)
     cache_key = f"{tid}:{config.cred_key(sp_dc)}"
     cached = config.EMBED_CACHE.get(cache_key)
@@ -211,6 +217,8 @@ async def get_embed_html(app, track_id: str, sp_dc: str) -> HTMLResponse:
         raise HTTPException(status_code=502, detail=f"Embed fetch {response.status_code}")
 
     html = response.text
+    bridge_tag = '<script src="/static/spotify-embed-bridge.js?v=ended-20260916"></script>'
+
     if "</head>" in html:
         html = html.replace(
             "</head>",
@@ -219,9 +227,11 @@ async def get_embed_html(app, track_id: str, sp_dc: str) -> HTMLResponse:
             '[data-testid="embed-widget-skeleton"],'
             '[data-testid="skeleton"],'
             '[data-testid="save-on-spotify"]{display:none !important}'
-            '</style></head>',
+            '</style>' + bridge_tag + '</head>',
             1
         )
+    else:
+        html = bridge_tag + html
 
     response_headers = {
         "X-Frame-Options": "ALLOWALL",
