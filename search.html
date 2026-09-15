@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Spotify</title>
   <link rel="stylesheet" href="/static/app.css">
+  <link rel="stylesheet" href="/static/mini-player-fix.css">
 </head>
 
 <body class="page-search">
@@ -125,12 +126,13 @@
       <i data-lucide="x"></i>
     </button>
     <iframe id="miniFrame" allow="autoplay *; encrypted-media; fullscreen; picture-in-picture; web-share"
-      allowfullscreen frameborder="0" loading="eager"></iframe>
+      allowfullscreen frameborder="0" loading="eager" title="Mini Spotify Player"></iframe>
   </div>
 
   <script src="https://unpkg.com/lucide@latest"></script>
   <script src="/static/search.js"></script>
   <script src="/static/playback-fixes.js"></script>
+  <script src="/static/mini-player-fix.js"></script>
 </body>
 
 </html>
