@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse
 
-from . import config, queue, services, settings, spdc
+from . import config, services, settings, spdc
 from .config import MAX_LIMIT
 from .mappers import sanitize_track_id
 
@@ -16,10 +16,6 @@ def _require(request: Request, sp_dc_q: Optional[str]) -> str | HTMLResponse:
     if isinstance(room_sp_dc, HTMLResponse):
         return room_sp_dc
     return room_sp_dc
-
-
-def _queue_response(items):
-    return {"items": items, "count": len(items)}
 
 
 @router.get("/health")
@@ -52,46 +48,6 @@ async def put_settings(request: Request):
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON body")
     return settings.save_settings(body or {})
-
-
-@router.get("/queue")
-async def get_queue():
-    return _queue_response(queue.read())
-
-
-@router.post("/queue")
-async def add_queue(request: Request):
-    try:
-        body = await request.json()
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON body")
-    items, added = queue.add(body or {})
-    return {**_queue_response(items), "added": added}
-
-
-@router.post("/queue/next")
-async def take_queue_next():
-    item, items = queue.take_next()
-    return {**_queue_response(items), "item": item}
-
-
-@router.put("/queue/{track_id}")
-async def update_queue(track_id: str, request: Request):
-    try:
-        body = await request.json()
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON body")
-    return _queue_response(queue.update(track_id, body or {}))
-
-
-@router.delete("/queue")
-async def clear_queue():
-    return _queue_response(queue.clear())
-
-
-@router.delete("/queue/{track_id}")
-async def delete_queue(track_id: str):
-    return _queue_response(queue.remove(track_id))
 
 
 @router.get("/search")

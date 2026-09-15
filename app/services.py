@@ -1,7 +1,7 @@
 import asyncio
 
 import httpx
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 
 from . import config, locks, spotify
@@ -98,6 +98,7 @@ async def get_track_metadata(app, track_id: str, sp_dc: str):
     oembed_thumb = None
     oembed_title = "Unknown"
     oembed_artist = ""
+
     try:
         response = await app.state.http.get(
             f"https://open.spotify.com/oembed?url=https://open.spotify.com/track/{tid}",
@@ -173,6 +174,7 @@ async def get_lyrics(app, track_id: str, sp_dc: str) -> dict:
 
     payload = await spotify.fetch_spotify_lyrics(app, tid, sp_dc)
     if not payload or not payload.get("lines"):
+        # Cache negative result briefly to avoid hammering upstream.
         cache_put(config.LYRICS_CACHE, tid,
                   {"data": {"trackId": tid, "syncType": "NONE",
                             "hasSync": False, "lines": [], "provider": None},
@@ -186,9 +188,8 @@ async def get_lyrics(app, track_id: str, sp_dc: str) -> dict:
 
 
 async def get_embed_html(app, track_id: str, sp_dc: str) -> HTMLResponse:
-    """Return the existing Spotify embed with a same-origin playback-event bridge."""
     tid = sanitize_track_id(track_id)
-    cache_key = f"bridge2:{tid}:{config.cred_key(sp_dc)}"
+    cache_key = f"{tid}:{config.cred_key(sp_dc)}"
     cached = config.EMBED_CACHE.get(cache_key)
     if cached and now() < cached["expiresAt"]:
         config.EMBED_CACHE.move_to_end(cache_key)
@@ -210,7 +211,6 @@ async def get_embed_html(app, track_id: str, sp_dc: str) -> HTMLResponse:
         raise HTTPException(status_code=502, detail=f"Embed fetch {response.status_code}")
 
     html = response.text
-    bridge_tag = '<script src="/static/spotify-embed-bridge.js?v=ended-20260916c"></script>'
     if "</head>" in html:
         html = html.replace(
             "</head>",
@@ -219,17 +219,15 @@ async def get_embed_html(app, track_id: str, sp_dc: str) -> HTMLResponse:
             '[data-testid="embed-widget-skeleton"],'
             '[data-testid="skeleton"],'
             '[data-testid="save-on-spotify"]{display:none !important}'
-            '</style>' + bridge_tag + '</head>',
+            '</style></head>',
             1
         )
-    else:
-        html = bridge_tag + html
 
     response_headers = {
         "X-Frame-Options": "ALLOWALL",
         "Content-Security-Policy": "frame-ancestors *",
         "Access-Control-Allow-Origin": "*",
-        "Cache-Control": "no-store",
+        "Cache-Control": "public, max-age=300",
     }
     cache_put(config.EMBED_CACHE, cache_key,
               {"html": html, "headers": response_headers,
