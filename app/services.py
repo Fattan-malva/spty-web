@@ -187,15 +187,9 @@ async def get_lyrics(app, track_id: str, sp_dc: str) -> dict:
 
 
 async def get_embed_html(app, track_id: str, sp_dc: str) -> HTMLResponse:
-    """Return Spotify's existing embed HTML with a same-origin playback-event bridge injected.
-
-    The bridge runs inside the proxied embed document, where it can observe messages from
-    Spotify's own player and forward playback events to our player.html parent window.
-    This preserves the existing authenticated embed instead of replacing it with a new
-    client-side embed implementation.
-    """
+    """Return the existing Spotify embed with a same-origin playback-event bridge."""
     tid = sanitize_track_id(track_id)
-    cache_key = f"{tid}:{config.cred_key(sp_dc)}"
+    cache_key = f"bridge2:{tid}:{config.cred_key(sp_dc)}"
     cached = config.EMBED_CACHE.get(cache_key)
     if cached and now() < cached["expiresAt"]:
         config.EMBED_CACHE.move_to_end(cache_key)
@@ -218,7 +212,6 @@ async def get_embed_html(app, track_id: str, sp_dc: str) -> HTMLResponse:
 
     html = response.text
     bridge_tag = '<script src="/static/spotify-embed-bridge.js?v=ended-20260916"></script>'
-
     if "</head>" in html:
         html = html.replace(
             "</head>",
@@ -237,7 +230,7 @@ async def get_embed_html(app, track_id: str, sp_dc: str) -> HTMLResponse:
         "X-Frame-Options": "ALLOWALL",
         "Content-Security-Policy": "frame-ancestors *",
         "Access-Control-Allow-Origin": "*",
-        "Cache-Control": "public, max-age=300",
+        "Cache-Control": "no-store",
     }
     cache_put(config.EMBED_CACHE, cache_key,
               {"html": html, "headers": response_headers,
