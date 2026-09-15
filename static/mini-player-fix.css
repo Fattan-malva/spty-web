@@ -1,0 +1,26 @@
+/* The mini player uses the real player.html iframe as its only playback owner. */
+.mini-player.streaming iframe {
+  display: block !important;
+}
+
+.mini-player iframe {
+  width: 100%;
+  min-height: 128px;
+  height: 128px;
+  border: 0;
+  border-radius: 8px;
+  background: #181818;
+}
+
+@media (max-width: 560px) {
+  .mini-player {
+    right: 10px;
+    bottom: 10px;
+    width: calc(100vw - 20px);
+  }
+
+  .mini-player iframe {
+    height: 118px;
+    min-height: 118px;
+  }
+}
