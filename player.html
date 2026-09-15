@@ -27,8 +27,7 @@
     }
 
     html.mini-embed #pvBody,
-    html.mini-embed .embed-panel,
-    html.mini-embed #spWidget {
+    html.mini-embed .embed-panel {
       position: absolute !important;
       inset: 0 !important;
       width: 100% !important;
@@ -46,6 +45,7 @@
 
     html.mini-embed #pvBody {
       display: block !important;
+      overflow: hidden !important;
     }
 
     html.mini-embed .embed-panel {
@@ -55,8 +55,25 @@
     }
 
     html.mini-embed #spWidget {
+      position: absolute !important;
+      left: 0 !important;
+      top: 0 !important;
+      right: auto !important;
+      bottom: auto !important;
+      width: calc(100% + 10px) !important;
+      height: calc(100% + 10px) !important;
+      min-width: 0 !important;
+      min-height: 0 !important;
+      max-width: none !important;
+      max-height: none !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      border: 0 !important;
+      border-radius: 0 !important;
+      box-sizing: border-box !important;
       display: block !important;
       background: #181818 !important;
+      transform: none !important;
     }
   </style>
   <script>
