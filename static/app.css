@@ -52,13 +52,15 @@ body.page-search::-webkit-scrollbar {
 
 .mini-player {
   position: fixed;
-  right: 24px;
-  bottom: 24px;
+  right: 16px;
+  bottom: 16px;
   z-index: 120;
   display: grid;
-  grid-template-columns: minmax(120px, 1fr) 30px 30px;
+  grid-template-columns: 42px minmax(120px, 1fr) 30px 30px;
+  align-items: center;
   gap: 8px;
-  width: min(360px, calc(100vw - 48px));
+  width: min(380px, calc(100vw - 32px));
+  min-height: 58px;
   padding: 8px;
   border: 1px solid rgba(255, 255, 255, .12);
   border-radius: 12px;
@@ -66,6 +68,35 @@ body.page-search::-webkit-scrollbar {
   box-shadow: 0 16px 44px rgba(0, 0, 0, .55);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px)
+}
+
+.mini-artwork {
+  width: 42px;
+  height: 42px;
+  border-radius: 6px;
+  object-fit: cover;
+  background: #181818
+}
+
+.queue-thumb {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  border-radius: 4px;
+  object-fit: cover;
+  background: #181818
+}
+
+.queue-thumb-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, .35)
+}
+
+.queue-thumb-empty svg {
+  width: 16px;
+  height: 16px
 }
 
 .mini-copy {
@@ -235,7 +266,8 @@ body.page-search::-webkit-scrollbar {
   gap: 10px;
   min-height: 48px;
   padding: 6px 4px 6px 8px;
-  border-radius: 6px
+  border-radius: 6px;
+  cursor: pointer
 }
 
 .queue-item:hover {

@@ -176,19 +176,12 @@
       state.queueAdvancePending = true;
       var next = queue.shift();
       localStorage.setItem('spotifyQueue', JSON.stringify(queue));
-      if (new URLSearchParams(location.search).get('embedded') === '1') {
-        openPlayer(next.trackId);
-      } else {
-        localStorage.setItem('spotifyPlayback', JSON.stringify({
-          trackId: next.trackId,
-          title: next.title || '',
-          artist: next.artist || '',
-          thumbnail: next.thumbnail || '',
-          positionMs: 0,
-          playing: false
-        }));
-        location.replace('/player?trackId=' + encodeURIComponent(next.trackId));
-      }
+      var embedded = new URLSearchParams(location.search).get('embedded') === '1';
+      // Ganti track di tempat (tanpa reload halaman penuh) agar browser tidak
+      // kehilangan izin autoplay yang biasanya hanya berlaku selama page load yang sama.
+      var newUrl = '/player?trackId=' + encodeURIComponent(next.trackId) + (embedded ? '&embedded=1' : '');
+      history.replaceState(embedded ? null : { playerPage: true }, '', newUrl);
+      openPlayer(next.trackId);
       return true;
     } catch (e) {
       return false;
@@ -218,7 +211,11 @@
     queue.forEach(function (item, index) {
       var row = document.createElement('div');
       row.className = 'queue-item';
-      row.innerHTML = '<span class="queue-item-copy"><strong>' + escapeHtml(item.title || 'Unknown') + '</strong><small>' + escapeHtml(item.artist || '') + '</small></span>' +
+      row.dataset.index = index;
+      row.dataset.trackId = item.trackId || '';
+      row.title = 'Putar sekarang';
+      row.innerHTML = (item.thumbnail ? '<img class="queue-thumb" src="' + escapeHtml(item.thumbnail) + '" alt="">' : '<span class="queue-thumb queue-thumb-empty"><i data-lucide="music"></i></span>') +
+        '<span class="queue-item-copy"><strong>' + escapeHtml(item.title || 'Unknown') + '</strong><small>' + escapeHtml(item.artist || '') + '</small></span>' +
         '<button class="queue-remove" data-index="' + index + '" title="Hapus dari antrean" aria-label="Hapus dari antrean"><i data-lucide="x"></i></button>';
       list.appendChild(row);
     });
@@ -493,11 +490,25 @@
     });
     queueList.addEventListener('click', function (e) {
       var remove = e.target.closest('.queue-remove');
-      if (!remove) return;
+      if (remove) {
+        e.stopPropagation();
+        var queue = readQueue();
+        queue.splice(Number(remove.dataset.index), 1);
+        localStorage.setItem('spotifyQueue', JSON.stringify(queue));
+        renderQueue();
+        return;
+      }
+      var row = e.target.closest('.queue-item');
+      if (!row) return;
+      var index = Number(row.dataset.index);
       var queue = readQueue();
-      queue.splice(Number(remove.dataset.index), 1);
+      var item = queue[index];
+      if (!item || !item.trackId) return;
+      // Lagu yang diputar langsung dari antrean harus hilang dari antrean.
+      queue.splice(index, 1);
       localStorage.setItem('spotifyQueue', JSON.stringify(queue));
-      renderQueue();
+      queuePanel.hidden = true;
+      openPlayer(item.trackId);
     });
     queueClear.addEventListener('click', function () {
       localStorage.removeItem('spotifyQueue');
