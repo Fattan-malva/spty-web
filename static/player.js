@@ -132,7 +132,6 @@
     el.spWidget.onload = function () {
       el.pvLoading.style.display = 'none';
       el.embedPanel.style.display = 'block';
-      ensurePlaying(8);
       startMonitor();
     };
 
@@ -218,8 +217,8 @@
   }
 
   function escapeHtml(value) {
-    return String(value).replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    return String(value).replace(/[&<>\"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', "'": '&#39;' }[c];
     });
   }
 
@@ -248,11 +247,8 @@
   }
 
   function goBack() {
-    samplePlayhead();
-    var doc = getEmbedDoc();
-    var media = doc && doc.querySelector('audio, video');
-    var isPlaying = !!(media && !media.paused) || state.isPlaying;
-    state.isPlaying = isPlaying;
+    state.playhead = state.playhead || 0;
+    var isPlaying = state.isPlaying;
     rememberPlayback();
 
     if (state.mini) {
@@ -282,71 +278,6 @@
     try { return el.spWidget.contentDocument || null; } catch (e) { return null; }
   }
 
-  function clickPlayButton(doc) {
-    var sel = [
-      'button[data-testid="play-pause-button"]',
-      'button[data-testid="play-button"]',
-      'button[aria-label="Play"]',
-      'button[aria-label="Putar"]'
-    ];
-    for (var i = 0; i < sel.length; i++) {
-      var b = doc.querySelector(sel[i]);
-      if (b && !b.disabled) {
-        var lb = (b.getAttribute('aria-label') || '').toLowerCase();
-        if (lb.indexOf('pause') === -1 && lb.indexOf('jeda') === -1) {
-          try { b.click(); } catch (e) {}
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-
-  function ensurePlaying(rounds) {
-    if (state.autoplayDone || state.autoplayPending || rounds <= 0) return;
-    var doc = getEmbedDoc();
-    if (!doc) {
-      setTimeout(function () { ensurePlaying(rounds - 1); }, 250);
-      return;
-    }
-    var media = doc.querySelector('audio,video');
-    if (media && !media.paused && media.currentTime > 0) {
-      state.isPlaying = true;
-      state.autoplayDone = true;
-      return;
-    }
-    state.autoplayPending = true;
-    if (media) {
-      try {
-        var playResult = media.play();
-        if (playResult && typeof playResult.then === 'function') {
-          playResult.then(function () {
-            state.isPlaying = true;
-            state.autoplayDone = true;
-            state.autoplayPending = false;
-          }).catch(function () { state.autoplayPending = false; });
-        } else {
-          state.isPlaying = true;
-          state.autoplayDone = true;
-          state.autoplayPending = false;
-        }
-      } catch (e) { state.autoplayPending = false; }
-    } else {
-      if (clickPlayButton(doc)) {
-        state.isPlaying = true;
-        state.autoplayDone = true;
-      } else {
-        state.autoplayPending = false;
-      }
-    }
-    if (!state.autoplayDone) {
-      setTimeout(function () {
-        state.autoplayPending = false;
-        ensurePlaying(rounds - 1);
-      }, 250);
-    }
-  }
-
   function renderLyrics() {
     if (!state.lyrics || !state.lyrics.lines) return;
     el.pvLyrics.innerHTML = '';
@@ -362,21 +293,11 @@
   }
 
   function seekTo(ms) {
-    var doc = getEmbedDoc();
-    if (!doc) return;
     try {
-      var media = doc.querySelector('audio, video');
-      if (!media) return;
-      var wasPlaying = !media.paused;
-      media.currentTime = ms / 1000;
+      var payload = { type: 'seek-request', position: ms, trackId: state.trackId };
+      el.spWidget.contentWindow.postMessage(payload, location.origin);
       state.playhead = ms;
-      state.isPlaying = wasPlaying;
-      state.useMsg = false;
       updateActiveLine(ms);
-      if (wasPlaying) {
-        var p = media.play();
-        if (p && p.catch) p.catch(function () {});
-      }
     } catch (e) {}
   }
 
@@ -408,79 +329,12 @@
     }
   }
 
-  function samplePlayhead() {
-    var doc = getEmbedDoc();
-    if (!doc) return false;
-    var medias;
-    try { medias = doc.querySelectorAll('audio, video'); } catch (e) { medias = []; }
-    var best = null;
-    var fallback = null;
-    for (var i = 0; i < medias.length; i++) {
-      var m = medias[i];
-      if (!m) continue;
-      if (!fallback) fallback = m;
-      if (!m.paused) { best = m; break; }
-    }
-    if (!best) best = fallback;
-    if (!best) {
-      state.isPlaying = false;
-      return false;
-    }
-    state.isPlaying = !best.paused;
-    if (!state.useMsg || Date.now() - state.lastMessageAt > 1000) {
-      state.playhead = (best.currentTime || 0) * 1000;
-      state.useMsg = false;
-    }
-    return state.isPlaying;
-  }
-
-  window.addEventListener('message', function (e) {
-    var d = e.data;
-    if (!d || typeof d !== 'object') return;
-
-    if (d.type === 'expand-lyrics-view' && state.mini) {
-      setExpandedView(true);
-      return;
-    }
-
-    if (d.type === 'collapse-mini-view' && state.mini) {
-      setExpandedView(false);
-      return;
-    }
-
-    var payload = d.payload || d.data || d;
-    var position = payload.position;
-    if (typeof position !== 'number') position = payload.positionMs;
-    if (typeof position !== 'number') position = d.ms;
-    if (d.type === 'playback_started') state.isPlaying = true;
-    if ((d.type === 'playhead' || d.type === 'playback_update' || d.type === 'playback_started') && typeof position === 'number') {
-      state.playhead = position;
-      state.useMsg = true;
-      state.lastMessageAt = Date.now();
-    }
-  });
-
   function startMonitor() {
-    stopMonitor();
+    if (state.lyricTimer) clearInterval(state.lyricTimer);
     state.lyricTimer = setInterval(function () {
-      var doc = getEmbedDoc();
-      if (doc && !state.endedBound) {
-        var media = doc.querySelector('audio, video');
-        if (media) {
-          state.endedBound = true;
-          media.addEventListener('ended', function () {
-            state.isPlaying = false;
-            rememberPlayback();
-            playNextQueued();
-          });
-        }
-      }
-      state.isPlaying = samplePlayhead();
+      if (state.lyrics) updateActiveLine(state.playhead);
       rememberPlayback();
-      if (state.lyrics && !document.documentElement.classList.contains('mini-embed')) {
-        updateActiveLine(state.playhead);
-      }
-    }, 150);
+    }, 250);
   }
 
   function stopMonitor() {
@@ -492,9 +346,38 @@
 
   el.btnBack.addEventListener('click', goBack);
 
+  window.addEventListener('message', function (e) {
+    if (e.origin !== location.origin || !e.data) return;
+    var d = e.data;
+    var payload = d.payload || d.data || d;
+    var position = payload && typeof payload.position === 'number' ? payload.position : null;
+
+    if (d.type === 'playback_started') {
+      state.isPlaying = true;
+      state.playhead = 0;
+      state.useMsg = true;
+      state.lastMessageAt = Date.now();
+      return;
+    }
+
+    if (d.type === 'playback_update' && position !== null) {
+      state.playhead = position;
+      state.isPlaying = payload.isPaused !== true;
+      state.useMsg = true;
+      state.lastMessageAt = Date.now();
+      updateActiveLine(position);
+    }
+  });
+
+  window.addEventListener('queue-ended-local', function (event) {
+    var detail = event.detail || {};
+    console.log('[PLAYER] queue-ended-local', detail);
+    playNextQueued();
+  });
+
   window.addEventListener('pagehide', function () {
-    samplePlayhead();
     rememberPlayback();
+    stopMonitor();
   });
 
   el.gateBack.addEventListener('click', function () { location.href = '/'; });
@@ -503,64 +386,12 @@
     if (e.key === 'Escape') goBack();
   });
 
-  el.embedPanel.addEventListener('click', function () {
-    state.autoplayPending = false;
-    state.autoplayDone = false;
-    ensurePlaying(4);
-  });
-
-  var queueBtn = document.getElementById('queueBtn');
-  var queuePanel = document.getElementById('queuePanel');
-  var queueList = document.getElementById('queueList');
-  var queueClear = document.getElementById('queueClear');
-  if (queueBtn && queuePanel && queueList && queueClear) {
-    queueBtn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      queuePanel.hidden = !queuePanel.hidden;
-      if (!queuePanel.hidden) renderQueue();
-    });
-    queueList.addEventListener('click', function (e) {
-      var remove = e.target.closest('.queue-remove');
-      if (remove) {
-        e.stopPropagation();
-        var queue = readQueue();
-        queue.splice(Number(remove.dataset.index), 1);
-        localStorage.setItem('spotifyQueue', JSON.stringify(queue));
-        renderQueue();
-        return;
-      }
-      var row = e.target.closest('.queue-item');
-      if (!row) return;
-      var index = Number(row.dataset.index);
-      var queue = readQueue();
-      var item = queue[index];
-      if (!item || !item.trackId) return;
-      queue.splice(index, 1);
-      localStorage.setItem('spotifyQueue', JSON.stringify(queue));
-      queuePanel.hidden = true;
-      openPlayer(item.trackId);
-    });
-    queueClear.addEventListener('click', function () {
-      localStorage.removeItem('spotifyQueue');
-      renderQueue();
-    });
-  }
-
   var trackId = params.get('trackId');
 
   if (!state.embedded && !state.mini) {
     history.pushState({ playerPage: true }, '', location.href);
     window.addEventListener('popstate', function () { location.replace('/'); });
   }
-
-  window.addEventListener('message', function (e) {
-    if (e.origin !== location.origin || !e.data || e.data.type !== 'player-stop') return;
-    var doc = getEmbedDoc();
-    var media = doc && doc.querySelector('audio, video');
-    if (media) media.pause();
-    state.isPlaying = false;
-    localStorage.removeItem('spotifyPlayback');
-  });
 
   if (!trackId) {
     location.href = '/';
