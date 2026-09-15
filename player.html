@@ -7,6 +7,45 @@
   <title>Spotify Player</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
   <link rel="stylesheet" href="/static/app.css">
+  <style>
+    html.mini-embed,
+    html.mini-embed body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    html.mini-embed .pv-top,
+    html.mini-embed .lyrics-outer,
+    html.mini-embed .player-queue-panel {
+      display: none !important;
+    }
+
+    html.mini-embed #pvBody,
+    html.mini-embed .embed-panel,
+    html.mini-embed #spWidget {
+      width: 100%;
+      height: 100dvh;
+      min-height: 100%;
+    }
+
+    html.mini-embed #pvBody {
+      display: block;
+    }
+
+    html.mini-embed .embed-panel {
+      display: block !important;
+    }
+  </style>
+  <script>
+    (function () {
+      try {
+        if (new URLSearchParams(location.search).get('mini') === '1') {
+          document.documentElement.classList.add('mini-embed');
+        }
+      } catch (e) {}
+    })();
+  </script>
 </head>
 
 <body class="page-player">
