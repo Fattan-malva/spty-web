@@ -16,7 +16,8 @@
     isPlaying: false,
     queueAdvancePending: false,
     embedded: params.get('embedded') === '1',
-    mini: params.get('mini') === '1'
+    mini: params.get('mini') === '1',
+    expanded: false
   };
 
   var el = {
@@ -78,8 +79,9 @@
 
   function setExpandedView(expanded) {
     if (!state.mini) return;
+    state.expanded = !!expanded;
     var root = document.documentElement;
-    if (expanded) {
+    if (state.expanded) {
       root.classList.remove('mini-embed');
       document.body.classList.remove('mini-embed');
       el.embedPanel.style.display = 'block';
@@ -111,6 +113,7 @@
     state.autoplayDone = false;
     state.endedBound = false;
     state.queueAdvancePending = false;
+    state.expanded = false;
 
     if (state.mini) {
       setExpandedView(false);
@@ -147,7 +150,7 @@
       .then(function (l) {
         if (l && l.lines && l.lines.length) {
           state.lyrics = l;
-          if (!state.mini) {
+          if (!state.mini || state.expanded) {
             renderLyrics();
             document.body.classList.add('lyrics-mode');
           }
@@ -321,17 +324,13 @@
             state.isPlaying = true;
             state.autoplayDone = true;
             state.autoplayPending = false;
-          }).catch(function () {
-            state.autoplayPending = false;
-          });
+          }).catch(function () { state.autoplayPending = false; });
         } else {
           state.isPlaying = true;
           state.autoplayDone = true;
           state.autoplayPending = false;
         }
-      } catch (e) {
-        state.autoplayPending = false;
-      }
+      } catch (e) { state.autoplayPending = false; }
     } else {
       if (clickPlayButton(doc)) {
         state.isPlaying = true;
@@ -355,9 +354,7 @@
       var d = document.createElement('div');
       d.className = 'l-line' + (state.lyrics.hasSync ? '' : ' unsynced');
       d.textContent = ln.text || '\u00A0';
-      if (state.lyrics.hasSync) {
-        d.addEventListener('click', function () { seekTo(ln.startMs); });
-      }
+      if (state.lyrics.hasSync) d.addEventListener('click', function () { seekTo(ln.startMs); });
       el.pvLyrics.appendChild(d);
     });
     el.lyricsOuter.style.display = 'block';
@@ -422,10 +419,7 @@
       var m = medias[i];
       if (!m) continue;
       if (!fallback) fallback = m;
-      if (!m.paused) {
-        best = m;
-        break;
-      }
+      if (!m.paused) { best = m; break; }
     }
     if (!best) best = fallback;
     if (!best) {
