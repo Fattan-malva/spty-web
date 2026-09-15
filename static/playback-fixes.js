@@ -1,230 +1,100 @@
 (function () {
   'use strict';
-
   var isSearch = document.body.classList.contains('page-search');
   var isPlayer = document.body.classList.contains('page-player');
 
-  function escapeHtml(value) {
-    return String(value == null ? '' : value).replace(/[&<>\"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', "'": '&#39;' }[c];
-    });
-  }
-
   function readQueue() {
-    try {
-      var q = JSON.parse(localStorage.getItem('spotifyQueue') || '[]');
-      return Array.isArray(q) ? q : [];
-    } catch (e) {
-      return [];
-    }
+    try { var q = JSON.parse(localStorage.getItem('spotifyQueue') || '[]'); return Array.isArray(q) ? q : []; } catch (e) { return []; }
   }
+  function readPlayback() { try { return JSON.parse(localStorage.getItem('spotifyPlayback') || 'null'); } catch (e) { return null; } }
 
-  function readPlayback() {
-    try { return JSON.parse(localStorage.getItem('spotifyPlayback') || 'null'); } catch (e) { return null; }
+  function injectStyles() {
+    if (document.getElementById('playback-fixes-style')) return;
+    var s = document.createElement('style');
+    s.id = 'playback-fixes-style';
+    s.textContent = '.mini-player{grid-template-columns:42px minmax(0,1fr) 30px 30px!important;width:min(380px,calc(100vw - 32px))!important;right:16px!important;bottom:16px!important;padding:8px!important;min-height:58px}.mini-player.streaming iframe{display:none!important}.mini-artwork{width:42px!important;height:42px!important;border-radius:6px!important;object-fit:cover!important;background:#282828;flex:none;display:block}.queue-thumb{width:36px!important;height:36px!important;min-width:36px!important;border-radius:4px!important;object-fit:cover!important;background:#282828;flex:none}.queue-thumb-empty{display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.4)}';
+    document.head.appendChild(s);
   }
 
   function ensureMiniArtwork() {
-    var mini = document.getElementById('miniPlayer');
-    var copy = document.querySelector('.mini-copy');
+    var mini = document.getElementById('miniPlayer'), copy = document.querySelector('.mini-copy');
     if (!mini || !copy || document.getElementById('miniArtwork')) return;
-    var img = document.createElement('img');
-    img.id = 'miniArtwork';
-    img.alt = '';
-    img.width = 42;
-    img.height = 42;
-    img.style.cssText = 'width:42px;height:42px;object-fit:cover;border-radius:6px;background:#282828;display:none;flex:none';
+    var img = document.createElement('img'); img.id = 'miniArtwork'; img.className = 'mini-artwork'; img.alt = ''; img.hidden = true;
     mini.insertBefore(img, copy);
-    mini.style.gridTemplateColumns = '42px minmax(120px,1fr) 30px 30px';
   }
-
   function updateMiniArtwork(item) {
-    var img = document.getElementById('miniArtwork');
-    if (!img) return;
-    var src = item && item.thumbnail ? item.thumbnail : '';
-    if (!src) {
-      img.removeAttribute('src');
-      img.style.display = 'none';
-      return;
-    }
-    img.src = src;
-    img.style.display = 'block';
+    var img = document.getElementById('miniArtwork'); if (!img) return;
+    if (!item || !item.thumbnail) { img.hidden = true; img.removeAttribute('src'); return; }
+    img.src = item.thumbnail; img.hidden = false;
   }
-
   function decorateQueueItems() {
-    var list = document.getElementById('queueList');
-    if (!list) return;
-    var queue = readQueue();
-    var rows = list.querySelectorAll('.queue-item');
+    var list = document.getElementById('queueList'); if (!list) return;
+    var queue = readQueue(), rows = list.querySelectorAll('.queue-item');
     for (var i = 0; i < rows.length; i++) {
-      var row = rows[i];
-      if (row.querySelector('.queue-thumb')) continue;
-      var item = queue[i];
-      if (!item) continue;
-      var img = document.createElement('img');
-      img.className = 'queue-thumb';
-      img.alt = '';
-      img.loading = 'lazy';
-      img.src = item.thumbnail || '';
+      var item = queue[i], row = rows[i]; if (!item) continue;
+      var old = row.querySelector('.queue-thumb');
+      if (old) { if (item.thumbnail && old.src !== item.thumbnail) old.src = item.thumbnail; continue; }
+      var img = document.createElement('img'); img.className = 'queue-thumb'; img.alt = ''; img.loading = 'lazy';
+      if (item.thumbnail) img.src = item.thumbnail; else img.classList.add('queue-thumb-empty');
       img.onerror = function () { this.style.visibility = 'hidden'; };
       row.insertBefore(img, row.firstChild);
     }
   }
-
   function startQueueObserver() {
-    var list = document.getElementById('queueList');
-    if (!list || !window.MutationObserver) return;
-    new MutationObserver(function () { decorateQueueItems(); }).observe(list, { childList: true, subtree: true });
-    decorateQueueItems();
+    var list = document.getElementById('queueList'); if (!list || !window.MutationObserver) return;
+    new MutationObserver(decorateQueueItems).observe(list, { childList: true, subtree: true }); decorateQueueItems();
   }
 
   if (isSearch) {
-    ensureMiniArtwork();
-    startQueueObserver();
-
+    injectStyles(); ensureMiniArtwork(); startQueueObserver();
     function forceMiniVisible() {
-      var saved = readPlayback();
-      var mini = document.getElementById('miniPlayer');
-      if (!mini || !saved || !saved.trackId || saved.playing !== true) return;
-      var title = document.getElementById('miniTitle');
-      var artist = document.getElementById('miniArtist');
+      var saved = readPlayback(), mini = document.getElementById('miniPlayer'); if (!mini || !saved || !saved.trackId) return;
+      var title = document.getElementById('miniTitle'), artist = document.getElementById('miniArtist');
       if (title) title.textContent = saved.title || 'Sedang diputar';
       if (artist) artist.textContent = saved.artist || '';
-      updateMiniArtwork(saved);
-      mini.classList.add('streaming');
-      mini.hidden = false;
-      if (typeof window.lucide !== 'undefined') window.lucide.createIcons();
+      updateMiniArtwork(saved); mini.classList.add('streaming'); mini.hidden = false;
+      if (window.lucide) window.lucide.createIcons();
     }
-
-    function nextFromPlayerFrame() {
-      var frame = document.getElementById('playerFrame');
-      if (!frame || frame.hidden) return;
-      var doc = null;
-      try { doc = frame.contentDocument || null; } catch (e) { return; }
-      if (!doc) return;
-      var inner = doc.getElementById('spWidget');
-      if (!inner) return;
-      var embedDoc = null;
-      try { embedDoc = inner.contentDocument || null; } catch (e2) { return; }
-      if (!embedDoc) return;
-      var media = embedDoc.querySelector('audio,video');
-      if (!media) return;
-
-      var ended = !!media.ended;
-      if (!ended && isFinite(media.duration) && media.duration > 0) {
-        ended = media.currentTime >= Math.max(0, media.duration - 0.35);
-      }
-      if (!ended) return;
-
-      var queue = readQueue();
-      if (!queue.length) return;
-      var saved = readPlayback();
-      var current = saved && saved.trackId ? saved.trackId : '';
-      var next = queue[0];
-      var key = current + '|' + next.trackId;
-      var last = nextFromPlayerFrame._lastKey || '';
-      if (key === last) return;
-      nextFromPlayerFrame._lastKey = key;
-
-      queue.shift();
-      localStorage.setItem('spotifyQueue', JSON.stringify(queue));
-      localStorage.setItem('spotifyPlayback', JSON.stringify({
-        trackId: next.trackId,
-        title: next.title || '',
-        artist: next.artist || '',
-        thumbnail: next.thumbnail || '',
-        positionMs: 0,
-        playing: false
-      }));
-
-      var embedded = new URLSearchParams(location.search).get('embedded') === '1';
-      var url = '/player?trackId=' + encodeURIComponent(next.trackId) + (embedded ? '&embedded=1' : '');
-      frame.src = url;
-      setTimeout(forceMiniVisible, 100);
-    }
-
+    // Capture before search.js receives player-back, so its missing thumbnail cannot erase ours.
     window.addEventListener('message', function (e) {
-      if (e.origin !== location.origin || !e.data) return;
-      if (e.data.type === 'player-back' || e.data.type === 'playback-state') {
-        setTimeout(forceMiniVisible, 0);
-        setTimeout(forceMiniVisible, 120);
-      }
-    });
-
-    window.addEventListener('popstate', function () {
-      setTimeout(forceMiniVisible, 0);
-      setTimeout(forceMiniVisible, 120);
-    });
-
-    window.addEventListener('pageshow', function () {
+      if (e.origin !== location.origin || !e.data || e.data.type !== 'player-back') return;
+      var incoming = e.data.playback || {}, before = readPlayback() || {}, merged = Object.assign({}, before, incoming);
+      if (!incoming.thumbnail && before.thumbnail) merged.thumbnail = before.thumbnail;
+      if (!incoming.title && before.title) merged.title = before.title;
+      if (!incoming.artist && before.artist) merged.artist = before.artist;
+      if (merged.trackId) localStorage.setItem('spotifyPlayback', JSON.stringify(merged));
+      setTimeout(forceMiniVisible, 0); setTimeout(forceMiniVisible, 120);
+    }, true);
+    window.addEventListener('message', function (e) {
+      if (e.origin !== location.origin || !e.data || e.data.type !== 'playback-state') return;
+      if (e.data.playback && e.data.playback.trackId) localStorage.setItem('spotifyPlayback', JSON.stringify(e.data.playback));
       setTimeout(forceMiniVisible, 0);
     });
-
-    var queueBtn = document.getElementById('queueBtn');
-    if (queueBtn) queueBtn.addEventListener('click', function () {
-      setTimeout(decorateQueueItems, 0);
-    });
-
-    setInterval(function () {
-      decorateQueueItems();
-      forceMiniVisible();
-      nextFromPlayerFrame();
-    }, 250);
+    window.addEventListener('popstate', function () { setTimeout(forceMiniVisible, 0); setTimeout(forceMiniVisible, 120); });
+    window.addEventListener('pageshow', function () { setTimeout(forceMiniVisible, 0); });
+    var queueBtn = document.getElementById('queueBtn'); if (queueBtn) queueBtn.addEventListener('click', function () { setTimeout(decorateQueueItems, 0); });
+    setInterval(function () { decorateQueueItems(); forceMiniVisible(); }, 250);
   }
 
   if (isPlayer) {
-    startQueueObserver();
-
-    var frame = document.getElementById('spWidget');
-    var lastHandledTrack = '';
-    var lastEndedAt = 0;
-
+    injectStyles(); startQueueObserver();
+    var frame = document.getElementById('spWidget'), lastHandledTrack = '', lastEndedAt = 0;
     function advanceQueueFallback() {
-      var queue = readQueue();
-      if (!queue.length) return false;
-      var saved = readPlayback();
-      var currentTrack = saved && saved.trackId ? saved.trackId : '';
-      var key = currentTrack + '|' + queue[0].trackId;
-      var now = Date.now();
+      var queue = readQueue(); if (!queue.length) return false;
+      var saved = readPlayback(), current = saved && saved.trackId ? saved.trackId : '', key = current + '|' + queue[0].trackId, now = Date.now();
       if (key === lastHandledTrack && now - lastEndedAt < 5000) return false;
-      lastHandledTrack = key;
-      lastEndedAt = now;
-
-      var next = queue.shift();
-      localStorage.setItem('spotifyQueue', JSON.stringify(queue));
-      localStorage.setItem('spotifyPlayback', JSON.stringify({
-        trackId: next.trackId,
-        title: next.title || '',
-        artist: next.artist || '',
-        thumbnail: next.thumbnail || '',
-        positionMs: 0,
-        playing: false
-      }));
-
-      var params = new URLSearchParams(location.search);
-      var embedded = params.get('embedded') === '1';
-      var url = '/player?trackId=' + encodeURIComponent(next.trackId) + (embedded ? '&embedded=1' : '');
-      location.replace(url);
-      return true;
+      lastHandledTrack = key; lastEndedAt = now;
+      var next = queue.shift(); localStorage.setItem('spotifyQueue', JSON.stringify(queue));
+      localStorage.setItem('spotifyPlayback', JSON.stringify({ trackId: next.trackId, title: next.title || '', artist: next.artist || '', thumbnail: next.thumbnail || '', positionMs: 0, playing: false }));
+      var params = new URLSearchParams(location.search), url = '/player?trackId=' + encodeURIComponent(next.trackId) + (params.get('embedded') === '1' ? '&embedded=1' : '');
+      location.replace(url); return true;
     }
-
     function inspectEndedMedia() {
-      if (!frame) return;
-      var doc = null;
-      try { doc = frame.contentDocument || null; } catch (e) { return; }
-      if (!doc) return;
-      var media = doc.querySelector('audio,video');
-      if (!media) return;
-      var ended = media.ended;
-      if (!ended && isFinite(media.duration) && media.duration > 0) {
-        ended = media.currentTime >= Math.max(0, media.duration - 0.35);
-      }
+      if (!frame) return; var doc = null; try { doc = frame.contentDocument || null; } catch (e) { return; }
+      if (!doc) return; var media = doc.querySelector('audio,video'); if (!media) return;
+      var ended = media.ended; if (!ended && isFinite(media.duration) && media.duration > 0) ended = media.currentTime >= Math.max(0, media.duration - 0.35);
       if (ended) advanceQueueFallback();
     }
-
-    setInterval(inspectEndedMedia, 250);
-    if (frame) frame.addEventListener('load', function () { setTimeout(inspectEndedMedia, 250); });
-
-    var queueBtn = document.getElementById('queueBtn');
-    if (queueBtn) queueBtn.addEventListener('click', function () { setTimeout(decorateQueueItems, 0); });
+    setInterval(inspectEndedMedia, 250); if (frame) frame.addEventListener('load', function () { setTimeout(inspectEndedMedia, 250); });
   }
 })();
