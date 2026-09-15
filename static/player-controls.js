@@ -9,6 +9,10 @@
     return document.getElementById('spWidget');
   }
 
+  function getTrackId() {
+    try { return new URLSearchParams(location.search).get('trackId') || ''; } catch (e) { return ''; }
+  }
+
   function getMediaFromDoc(doc, depth) {
     if (!doc || depth > 4) return null;
     try {
@@ -42,9 +46,7 @@
     if (media) {
       try { media.pause(); media.currentTime = media.currentTime; } catch (e) {}
     }
-    try {
-      localStorage.removeItem('spotifyPlayback');
-    } catch (e) {}
+    try { localStorage.removeItem('spotifyPlayback'); } catch (e) {}
   }
 
   function restorePlayback(playback) {
@@ -73,11 +75,7 @@
   function mediaSignature(media) {
     if (!media) return '';
     try {
-      return [
-        media.currentSrc || media.src || '',
-        Number.isFinite(media.duration) ? media.duration : 0,
-        media.readyState
-      ].join('|');
+      return [media.currentSrc || media.src || '', Number.isFinite(media.duration) ? media.duration : 0].join('|');
     } catch (e) {
       return '';
     }
@@ -88,6 +86,7 @@
       lastMedia = media;
       endedTriggered = false;
       lastTrackSignature = mediaSignature(media);
+      bindNativeEnded(media);
       return;
     }
 
@@ -97,22 +96,50 @@
       if (media.currentTime < 1 || media.duration > 0) {
         endedTriggered = false;
       }
+      bindNativeEnded(media);
     }
   }
 
-  function triggerEnded(media) {
+  function announceEnded(media, source) {
     if (!media || endedTriggered) return;
     endedTriggered = true;
 
+    var trackId = getTrackId();
+    var payload = {
+      trackId: trackId,
+      source: source,
+      currentTime: Number(media.currentTime || 0),
+      duration: Number(media.duration || 0)
+    };
+
+    console.log('[PLAYER] ended', payload);
+
     try {
-      media.dispatchEvent(new Event('ended'));
-    } catch (e) {
+      window.dispatchEvent(new CustomEvent('queue-ended-local', { detail: payload }));
+    } catch (e) {}
+
+    if (window.parent !== window) {
       try {
-        var evt = document.createEvent('Event');
-        evt.initEvent('ended', false, false);
-        media.dispatchEvent(evt);
-      } catch (ignore) {}
+        window.parent.postMessage({
+          type: 'queue-ended',
+          trackId: trackId,
+          source: source
+        }, location.origin);
+      } catch (e) {}
     }
+  }
+
+  function bindNativeEnded(media) {
+    if (!media || media.__queueEndedBound) return;
+    media.__queueEndedBound = true;
+    media.addEventListener('ended', function () {
+      console.log('[PLAYER] native media ended event', {
+        trackId: getTrackId(),
+        currentTime: Number(media.currentTime || 0),
+        duration: Number(media.duration || 0)
+      });
+      announceEnded(media, 'native-ended');
+    });
   }
 
   function monitorEnded() {
@@ -131,12 +158,10 @@
       var current = Number(media.currentTime);
 
       if (media.ended) {
-        triggerEnded(media);
+        announceEnded(media, 'media.ended');
         return;
       }
 
-      // Some Spotify embed versions finish without reliably dispatching
-      // the native `ended` event. Detect the playhead reaching the end.
       if (
         media.paused &&
         Number.isFinite(duration) &&
@@ -145,7 +170,12 @@
         current > 1 &&
         current >= duration - 0.35
       ) {
-        triggerEnded(media);
+        console.log('[PLAYER] ended fallback detected', {
+          trackId: getTrackId(),
+          currentTime: current,
+          duration: duration
+        });
+        announceEnded(media, 'playhead-threshold');
       }
     } catch (e) {}
   }
