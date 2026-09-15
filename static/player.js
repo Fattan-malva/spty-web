@@ -1,4 +1,6 @@
 (function () {
+  var params = new URLSearchParams(location.search);
+
   var state = {
     spDc: '',
     trackId: '',
@@ -12,7 +14,9 @@
     autoplayDone: false,
     endedBound: false,
     isPlaying: false,
-    queueAdvancePending: false
+    queueAdvancePending: false,
+    embedded: params.get('embedded') === '1',
+    mini: params.get('mini') === '1'
   };
 
   var el = {
@@ -59,7 +63,6 @@
     el.toast._t = setTimeout(function () { el.toast.classList.remove('show'); }, ms || 2200);
   }
 
-  // ---------- SETTINGS ----------
   function loadSettings() {
     return fetch('/settings')
       .then(function (r) { return r.json(); })
@@ -67,20 +70,32 @@
         state.spDc = (s && s.sp_dc) || '';
         return state.spDc;
       })
-      .catch(function () {
-        return '';
-      });
+      .catch(function () { return ''; });
   }
 
-  function showGate() {
-    el.gate.classList.add('open');
+  function showGate() { el.gate.classList.add('open'); }
+  function hideGate() { el.gate.classList.remove('open'); }
+
+  function setExpandedView(expanded) {
+    if (!state.mini) return;
+    var root = document.documentElement;
+    if (expanded) {
+      root.classList.remove('mini-embed');
+      document.body.classList.remove('mini-embed');
+      el.embedPanel.style.display = 'block';
+      if (state.lyrics && state.lyrics.lines && state.lyrics.lines.length) {
+        renderLyrics();
+        document.body.classList.add('lyrics-mode');
+      }
+      if (window.lucide) window.lucide.createIcons();
+    } else {
+      document.body.classList.remove('lyrics-mode');
+      root.classList.add('mini-embed');
+      el.lyricsOuter.style.display = 'none';
+      el.embedPanel.style.display = 'block';
+    }
   }
 
-  function hideGate() {
-    el.gate.classList.remove('open');
-  }
-
-  // ---------- PLAYER ----------
   function openPlayer(trackId) {
     if (!state.spDc) {
       showGate();
@@ -96,9 +111,15 @@
     state.autoplayDone = false;
     state.endedBound = false;
     state.queueAdvancePending = false;
+
+    if (state.mini) {
+      setExpandedView(false);
+    } else {
+      document.documentElement.classList.remove('mini-embed');
+    }
+
     rememberPlayback();
     document.body.classList.remove('lyrics-mode');
-
     el.pvTitle.textContent = 'Memuat...';
     el.pvArtist.textContent = '';
     el.pvLoading.style.display = 'flex';
@@ -111,6 +132,7 @@
       ensurePlaying(8);
       startMonitor();
     };
+
     el.spWidget.src = '/embed-proxy?trackId=' + encodeURIComponent(trackId) + credQ();
 
     api('/track?trackId=' + encodeURIComponent(trackId) + credQ())
@@ -125,8 +147,10 @@
       .then(function (l) {
         if (l && l.lines && l.lines.length) {
           state.lyrics = l;
-          renderLyrics();
-          document.body.classList.add('lyrics-mode');
+          if (!state.mini) {
+            renderLyrics();
+            document.body.classList.add('lyrics-mode');
+          }
         } else {
           finishEmbedOnly();
         }
@@ -162,10 +186,10 @@
         current.thumbnail = metadata.thumbnail || '';
       }
       localStorage.setItem('spotifyPlayback', JSON.stringify(current));
-      if (window.parent !== window && new URLSearchParams(location.search).get('embedded') === '1') {
+      if (window.parent !== window && state.embedded) {
         window.parent.postMessage({ type: 'playback-state', playback: current }, location.origin);
       }
-    } catch (e) { }
+    } catch (e) {}
   }
 
   function playNextQueued() {
@@ -176,11 +200,9 @@
       state.queueAdvancePending = true;
       var next = queue.shift();
       localStorage.setItem('spotifyQueue', JSON.stringify(queue));
-      var embedded = new URLSearchParams(location.search).get('embedded') === '1';
-      // Ganti track di tempat (tanpa reload halaman penuh) agar browser tidak
-      // kehilangan izin autoplay yang biasanya hanya berlaku selama page load yang sama.
-      var newUrl = '/player?trackId=' + encodeURIComponent(next.trackId) + (embedded ? '&embedded=1' : '');
-      history.replaceState(embedded ? null : { playerPage: true }, '', newUrl);
+      var newUrl = '/player?trackId=' + encodeURIComponent(next.trackId) +
+        (state.embedded ? '&embedded=1' : '') + (state.mini ? '&mini=1' : '');
+      history.replaceState(state.embedded ? null : { playerPage: true }, '', newUrl);
       openPlayer(next.trackId);
       return true;
     } catch (e) {
@@ -229,9 +251,15 @@
     var isPlaying = !!(media && !media.paused) || state.isPlaying;
     state.isPlaying = isPlaying;
     rememberPlayback();
+
+    if (state.mini) {
+      window.parent.postMessage({ type: 'collapse-mini-request' }, location.origin);
+      return;
+    }
+
     document.body.classList.remove('lyrics-mode');
     state.lyrics = null;
-    if (new URLSearchParams(location.search).get('embedded') === '1') {
+    if (state.embedded) {
       window.parent.postMessage({
         type: 'player-back',
         playback: {
@@ -247,7 +275,6 @@
     location.replace('/');
   }
 
-  // ---------- EMBED / AUTOPLAY ----------
   function getEmbedDoc() {
     try { return el.spWidget.contentDocument || null; } catch (e) { return null; }
   }
@@ -264,7 +291,7 @@
       if (b && !b.disabled) {
         var lb = (b.getAttribute('aria-label') || '').toLowerCase();
         if (lb.indexOf('pause') === -1 && lb.indexOf('jeda') === -1) {
-          try { b.click(); } catch (e) { }
+          try { b.click(); } catch (e) {}
           return true;
         }
       }
@@ -276,11 +303,12 @@
     if (state.autoplayDone || state.autoplayPending || rounds <= 0) return;
     var doc = getEmbedDoc();
     if (!doc) {
-      setTimeout(function () { ensurePlaying(rounds - 1); }, 700);
+      setTimeout(function () { ensurePlaying(rounds - 1); }, 250);
       return;
     }
     var media = doc.querySelector('audio,video');
     if (media && !media.paused && media.currentTime > 0) {
+      state.isPlaying = true;
       state.autoplayDone = true;
       return;
     }
@@ -292,44 +320,48 @@
           playResult.then(function () {
             state.isPlaying = true;
             state.autoplayDone = true;
+            state.autoplayPending = false;
           }).catch(function () {
             state.autoplayPending = false;
           });
         } else {
           state.isPlaying = true;
           state.autoplayDone = true;
+          state.autoplayPending = false;
         }
       } catch (e) {
         state.autoplayPending = false;
       }
     } else {
-      if (clickPlayButton(doc)) state.autoplayDone = true;
-      else state.autoplayPending = false;
+      if (clickPlayButton(doc)) {
+        state.isPlaying = true;
+        state.autoplayDone = true;
+      } else {
+        state.autoplayPending = false;
+      }
     }
     if (!state.autoplayDone) {
       setTimeout(function () {
         state.autoplayPending = false;
         ensurePlaying(rounds - 1);
-      }, 700);
+      }, 250);
     }
   }
 
-  // ---------- LYRICS ----------
   function renderLyrics() {
+    if (!state.lyrics || !state.lyrics.lines) return;
     el.pvLyrics.innerHTML = '';
     state.lyrics.lines.forEach(function (ln) {
       var d = document.createElement('div');
       d.className = 'l-line' + (state.lyrics.hasSync ? '' : ' unsynced');
       d.textContent = ln.text || '\u00A0';
       if (state.lyrics.hasSync) {
-        d.addEventListener('click', function () {
-          seekTo(ln.startMs);
-        });
+        d.addEventListener('click', function () { seekTo(ln.startMs); });
       }
       el.pvLyrics.appendChild(d);
     });
     el.lyricsOuter.style.display = 'block';
-    setTimeout(function () { updateActiveLine(0); }, 80);
+    setTimeout(function () { updateActiveLine(state.playhead || 0); }, 40);
   }
 
   function seekTo(ms) {
@@ -338,16 +370,21 @@
     try {
       var media = doc.querySelector('audio, video');
       if (!media) return;
+      var wasPlaying = !media.paused;
       media.currentTime = ms / 1000;
       state.playhead = ms;
+      state.isPlaying = wasPlaying;
       state.useMsg = false;
       updateActiveLine(ms);
-      if (media.paused) ensurePlaying(4);
-    } catch (e) { }
+      if (wasPlaying) {
+        var p = media.play();
+        if (p && p.catch) p.catch(function () {});
+      }
+    } catch (e) {}
   }
 
   function updateActiveLine(pos) {
-    if (!state.lyrics.hasSync) return;
+    if (!state.lyrics || !state.lyrics.hasSync) return;
     var lines = state.lyrics.lines;
     if (!lines || !lines.length) return;
     var idx = -1;
@@ -360,10 +397,10 @@
     if (idx === state.activeLine) return;
     state.activeLine = idx;
     var els = el.pvLyrics.children;
-    for (var i = 0; i < els.length; i++) {
-      var on = i === idx;
-      els[i].classList.toggle('active', on);
-      els[i].classList.toggle('dim', on === false);
+    for (var j = 0; j < els.length; j++) {
+      var on = j === idx;
+      els[j].classList.toggle('active', on);
+      els[j].classList.toggle('dim', !on);
     }
     if (idx >= 0) {
       var lineEl = els[idx];
@@ -376,7 +413,7 @@
 
   function samplePlayhead() {
     var doc = getEmbedDoc();
-    if (!doc) return;
+    if (!doc) return false;
     var medias;
     try { medias = doc.querySelectorAll('audio, video'); } catch (e) { medias = []; }
     var best = null;
@@ -406,15 +443,23 @@
   window.addEventListener('message', function (e) {
     var d = e.data;
     if (!d || typeof d !== 'object') return;
+
+    if (d.type === 'expand-lyrics-view' && state.mini) {
+      setExpandedView(true);
+      return;
+    }
+
+    if (d.type === 'collapse-mini-view' && state.mini) {
+      setExpandedView(false);
+      return;
+    }
+
     var payload = d.payload || d.data || d;
     var position = payload.position;
     if (typeof position !== 'number') position = payload.positionMs;
     if (typeof position !== 'number') position = d.ms;
-    if (d.type === 'playback_started') {
-      state.isPlaying = true;
-    }
-    if ((d.type === 'playhead' || d.type === 'playback_update' ||
-      d.type === 'playback_started') && typeof position === 'number') {
+    if (d.type === 'playback_started') state.isPlaying = true;
+    if ((d.type === 'playhead' || d.type === 'playback_update' || d.type === 'playback_started') && typeof position === 'number') {
       state.playhead = position;
       state.useMsg = true;
       state.lastMessageAt = Date.now();
@@ -436,15 +481,12 @@
           });
         }
       }
-      if (state.lyrics) {
-        state.isPlaying = samplePlayhead();
-        if (!state.isPlaying && !state.useMsg) return;
-        updateActiveLine(state.playhead);
-      } else {
-        state.isPlaying = samplePlayhead();
-      }
+      state.isPlaying = samplePlayhead();
       rememberPlayback();
-    }, 200);
+      if (state.lyrics && !document.documentElement.classList.contains('mini-embed')) {
+        updateActiveLine(state.playhead);
+      }
+    }, 150);
   }
 
   function stopMonitor() {
@@ -454,7 +496,6 @@
     }
   }
 
-  // ---------- EVENTS ----------
   el.btnBack.addEventListener('click', goBack);
 
   window.addEventListener('pagehide', function () {
@@ -462,14 +503,10 @@
     rememberPlayback();
   });
 
-  el.gateBack.addEventListener('click', function () {
-    location.href = '/';
-  });
+  el.gateBack.addEventListener('click', function () { location.href = '/'; });
 
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') {
-      goBack();
-    }
+    if (e.key === 'Escape') goBack();
   });
 
   el.embedPanel.addEventListener('click', function () {
@@ -504,7 +541,6 @@
       var queue = readQueue();
       var item = queue[index];
       if (!item || !item.trackId) return;
-      // Lagu yang diputar langsung dari antrean harus hilang dari antrean.
       queue.splice(index, 1);
       localStorage.setItem('spotifyQueue', JSON.stringify(queue));
       queuePanel.hidden = true;
@@ -516,16 +552,11 @@
     });
   }
 
-  // ---------- INIT ----------
-  var params = new URLSearchParams(location.search);
   var trackId = params.get('trackId');
-  var embedded = params.get('embedded') === '1';
 
-  if (!embedded) {
+  if (!state.embedded && !state.mini) {
     history.pushState({ playerPage: true }, '', location.href);
-    window.addEventListener('popstate', function () {
-      location.replace('/');
-    });
+    window.addEventListener('popstate', function () { location.replace('/'); });
   }
 
   window.addEventListener('message', function (e) {
@@ -543,7 +574,6 @@
   }
 
   document.title = 'Loading...';
-
   if (window.lucide) window.lucide.createIcons();
 
   loadSettings().then(function () {
