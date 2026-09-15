@@ -24,9 +24,7 @@
   }
 
   function writePlayback(value) {
-    try {
-      localStorage.setItem('spotifyPlayback', JSON.stringify(value));
-    } catch (e) {}
+    try { localStorage.setItem('spotifyPlayback', JSON.stringify(value)); } catch (e) {}
   }
 
   function updateHeader(value) {
@@ -49,7 +47,6 @@
     mini.classList.remove('expanded');
     mini.classList.add('streaming');
     mini.hidden = false;
-
     if (reloadFrame && frame.dataset.trackId !== value.trackId) {
       frame.dataset.trackId = value.trackId;
       frame.src = frameUrl(value.trackId);
@@ -58,7 +55,6 @@
 
   function openMini(source) {
     if (!source || !source.dataset || !source.dataset.id) return;
-
     var playback = {
       trackId: source.dataset.id,
       title: source.dataset.title || '',
@@ -67,7 +63,6 @@
       positionMs: 0,
       playing: true
     };
-
     writePlayback(playback);
     frame.dataset.trackId = playback.trackId;
     frame.src = frameUrl(playback.trackId);
@@ -80,19 +75,12 @@
   function expandForLyrics() {
     var playback = readPlayback();
     if (!playback || !playback.trackId) return;
-
     mini.classList.add('expanded');
     mini.classList.remove('streaming');
     mini.hidden = false;
-
-    /* Keep the exact same player iframe alive. Only its view changes. */
     try {
-      frame.contentWindow.postMessage({
-        type: 'expand-lyrics-view',
-        playback: playback
-      }, location.origin);
+      frame.contentWindow.postMessage({ type: 'expand-lyrics-view', playback: playback }, location.origin);
     } catch (e) {}
-
     history.pushState({ miniLyrics: true }, '', '/player?trackId=' + encodeURIComponent(playback.trackId));
   }
 
@@ -100,30 +88,18 @@
     mini.classList.remove('expanded');
     mini.classList.add('streaming');
     mini.hidden = false;
-
-    try {
-      frame.contentWindow.postMessage({ type: 'collapse-mini-view' }, location.origin);
-    } catch (e) {}
-
-    if (updateHistory && location.pathname === '/player') {
-      history.back();
-    }
+    try { frame.contentWindow.postMessage({ type: 'collapse-mini-view' }, location.origin); } catch (e) {}
+    if (updateHistory && location.pathname === '/player') history.back();
   }
 
   function closeMini() {
-    try {
-      frame.contentWindow.postMessage({ type: 'player-stop' }, location.origin);
-    } catch (e) {}
+    try { frame.contentWindow.postMessage({ type: 'player-stop' }, location.origin); } catch (e) {}
     frame.src = 'about:blank';
     frame.removeAttribute('data-track-id');
     mini.hidden = true;
     mini.classList.remove('streaming', 'expanded');
-    try {
-      localStorage.removeItem('spotifyPlayback');
-    } catch (e) {}
-    if (location.pathname === '/player') {
-      history.replaceState(null, '', '/');
-    }
+    try { localStorage.removeItem('spotifyPlayback'); } catch (e) {}
+    if (location.pathname === '/player') history.replaceState(null, '', '/');
   }
 
   function restore() {
@@ -135,8 +111,6 @@
     showMini(playback, true);
   }
 
-  /* Capture phase prevents the older search.js click handlers from opening a
-     second fullscreen player. There is now exactly one playback iframe. */
   document.addEventListener('click', function (event) {
     var target = event.target;
     var closest = target && target.closest ? target.closest.bind(target) : null;
@@ -175,14 +149,7 @@
       if (item && item.trackId) {
         queue.splice(index, 1);
         localStorage.setItem('spotifyQueue', JSON.stringify(queue));
-        openMini({
-          dataset: {
-            id: item.trackId,
-            title: item.title || '',
-            artist: item.artist || '',
-            thumbnail: item.thumbnail || ''
-          }
-        });
+        openMini({ dataset: { id: item.trackId, title: item.title || '', artist: item.artist || '', thumbnail: item.thumbnail || '' } });
         var panel = document.getElementById('queuePanel');
         if (panel) panel.hidden = true;
       }
@@ -216,21 +183,14 @@
 
     if (event.data.type === 'collapse-mini-request') {
       collapseLyrics(false);
-      if (location.pathname === '/player') {
-        history.back();
-      }
+      if (location.pathname === '/player') history.back();
     }
   });
 
   window.addEventListener('popstate', function () {
-    if (location.pathname === '/player' && mini.classList.contains('expanded')) {
-      collapseLyrics(false);
-    }
+    if (mini.classList.contains('expanded')) collapseLyrics(false);
   });
 
-  window.addEventListener('pageshow', function () {
-    setTimeout(restore, 0);
-  });
-
+  window.addEventListener('pageshow', function () { setTimeout(restore, 0); });
   setTimeout(restore, 0);
 })();
