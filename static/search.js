@@ -24,6 +24,17 @@
     scrollSentinel: document.getElementById('scrollSentinel'),
     searchbar: document.querySelector('.searchbar'),
     resultsSkeleton: document.getElementById('resultsSkeleton'),
+    homeDashboard: document.getElementById('homeDashboard'),
+    popularAlbums: document.getElementById('popularAlbums'),
+    accountPlaylists: document.getElementById('accountPlaylists'),
+    likedSongs: document.getElementById('likedSongs'),
+    homeStatus: document.getElementById('homeStatus'),
+    collectionDetail: document.getElementById('collectionDetail'),
+    collectionBack: document.getElementById('collectionBack'),
+    collectionType: document.getElementById('collectionType'),
+    collectionTitle: document.getElementById('collectionTitle'),
+    collectionCount: document.getElementById('collectionCount'),
+    collectionTracks: document.getElementById('collectionTracks'),
     suggestions: document.getElementById('suggestions'),
     searchInput: document.getElementById('searchInput'),
     btnSearch: document.getElementById('btnSearch'),
@@ -145,6 +156,108 @@
   }
 
   // ---------- SEARCH ----------
+  function homeSkeleton() {
+    var railSkeleton = '<div class="home-skeleton-card"><div class="skeleton-block home-skeleton-thumb"></div><div class="skeleton-block home-skeleton-title"></div><div class="skeleton-block home-skeleton-artist"></div></div>'.repeat(6);
+    el.popularAlbums.innerHTML = railSkeleton;
+    el.accountPlaylists.innerHTML = railSkeleton;
+    el.likedSongs.innerHTML = '<div class="skeleton-song-list home-liked-skeleton">' +
+      '<div class="skeleton-song"><div class="skeleton-block skeleton-thumb"></div><div class="skeleton-lines"><div class="skeleton-block skeleton-title"></div><div class="skeleton-block skeleton-artist"></div></div></div>'.repeat(4) +
+      '</div>';
+  }
+
+  function mediaCard(item) {
+    var card = document.createElement('article');
+    card.className = 'media-card';
+    card.dataset.id = item.id || '';
+    card.dataset.type = item.type || '';
+    card.dataset.title = item.title || '';
+    card.dataset.thumbnail = item.thumbnail || '';
+    card.innerHTML = (item.thumbnail ? '<img src="' + escapeHtml(item.thumbnail) + '" alt="" loading="lazy">' : '<div class="media-placeholder"><i data-lucide="music-2"></i></div>') +
+      '<strong>' + escapeHtml(item.title || 'Tanpa judul') + '</strong>' +
+      '<span>' + escapeHtml(item.artist || '') + '</span>';
+    return card;
+  }
+
+  function renderHome(data) {
+    var albums = data.popularAlbums || [];
+    var playlists = data.playlists || [];
+    var likedSongs = data.likedSongs || [];
+    el.popularAlbums.innerHTML = '';
+    el.accountPlaylists.innerHTML = '';
+    el.likedSongs.innerHTML = '';
+    albums.forEach(function (item) { el.popularAlbums.appendChild(mediaCard(item)); });
+    playlists.forEach(function (item) { el.accountPlaylists.appendChild(mediaCard(item)); });
+    likedSongs.forEach(function (item) { el.likedSongs.appendChild(card(item, false)); });
+    if (!albums.length) el.popularAlbums.innerHTML = '<p class="home-empty">Album populer belum tersedia.</p>';
+    if (!playlists.length) el.accountPlaylists.innerHTML = '<p class="home-empty">Playlist akun belum tersedia.</p>';
+    if (!likedSongs.length) el.likedSongs.innerHTML = '<p class="home-empty">Belum ada lagu yang disukai.</p>';
+    el.homeStatus.textContent = albums.length || playlists.length || likedSongs.length
+      ? 'Terhubung ke akun' : 'Akun terhubung, data belum tersedia';
+    refreshIcons();
+  }
+
+  function collectionSkeleton() {
+    return '<div class="skeleton-song-list collection-skeleton">' +
+      '<div class="skeleton-song"><div class="skeleton-block skeleton-thumb"></div><div class="skeleton-lines"><div class="skeleton-block skeleton-title"></div><div class="skeleton-block skeleton-artist"></div></div></div>'.repeat(5) +
+      '</div>';
+  }
+
+  function loadCollection(item) {
+    if (!item || !item.dataset.id) return;
+    el.homeDashboard.hidden = true;
+    el.collectionDetail.hidden = false;
+    el.collectionType.textContent = item.dataset.type === 'playlist' ? 'Playlist' : 'Album';
+    el.collectionTitle.textContent = item.dataset.title || 'Daftar lagu';
+    el.collectionCount.textContent = 'Memuat...';
+    el.collectionTracks.innerHTML = collectionSkeleton();
+    fetch('/collection/' + encodeURIComponent(item.dataset.type) + '/' + encodeURIComponent(item.dataset.id) +
+      '?sp_dc=' + encodeURIComponent(state.spDc))
+      .then(function (res) {
+        if (!res.ok) throw new Error('Daftar lagu gagal dimuat');
+        return res.json();
+      })
+      .then(function (data) {
+        var tracks = data.tracks || [];
+        el.collectionTracks.innerHTML = '';
+        el.collectionCount.textContent = tracks.length + ' lagu';
+        if (!tracks.length) {
+          el.collectionTracks.innerHTML = '<p class="home-empty">Belum ada lagu di koleksi ini.</p>';
+          return;
+        }
+        tracks.forEach(function (track) {
+          track.trackId = track.trackId || track.id;
+          el.collectionTracks.appendChild(card(track, false));
+        });
+        refreshIcons();
+      })
+      .catch(function (error) {
+        el.collectionCount.textContent = '';
+        el.collectionTracks.innerHTML = '<p class="home-empty">' + escapeHtml(error.message) + '</p>';
+      });
+  }
+
+  function homeMessage(text) {
+    el.homeStatus.textContent = text;
+    [el.popularAlbums, el.accountPlaylists, el.likedSongs].forEach(function (target) {
+      target.innerHTML = '<p class="home-empty">' + escapeHtml(text) + '</p>';
+    });
+  }
+
+  function loadHome() {
+    el.collectionDetail.hidden = true;
+    el.homeDashboard.hidden = false;
+    el.homeStatus.textContent = 'Memuat...';
+    homeSkeleton();
+    fetch('/home?sp_dc=' + encodeURIComponent(state.spDc))
+      .then(function (res) {
+        if (res.status === 401) throw new Error('Atur sp_dc terlebih dahulu');
+        if (!res.ok) throw new Error('Beranda gagal dimuat');
+        return res.json();
+      })
+      .then(renderHome)
+      .catch(function (error) { homeMessage(error.message); });
+  }
+
   function doSearch() {
     var q = el.searchInput.value.trim();
     if (!q) return;
@@ -153,6 +266,8 @@
     state.hasNext = false;
     state.requestId += 1;
     closeSuggestions();
+    document.body.classList.add('searching');
+    el.homeDashboard.hidden = true;
     el.hint.style.display = 'none';
     el.topResults.hidden = true;
     el.songResults.hidden = true;
@@ -353,6 +468,38 @@
     var id = cardEl.dataset.id;
     if (!id) return;
     openEmbeddedPlayer(cardEl);
+  });
+
+  el.homeDashboard.addEventListener('click', function (e) {
+    var queueButton = e.target.closest('.queue-next');
+    if (queueButton) {
+      e.stopPropagation();
+      enqueueTrack(queueButton.parentElement);
+      return;
+    }
+    var media = e.target.closest('.media-card');
+    if (media) {
+      loadCollection(media);
+      return;
+    }
+    var cardEl = e.target.closest('.card');
+    if (cardEl && cardEl.dataset.id) openEmbeddedPlayer(cardEl);
+  });
+
+  el.collectionTracks.addEventListener('click', function (e) {
+    var queueButton = e.target.closest('.queue-next');
+    if (queueButton) {
+      e.stopPropagation();
+      enqueueTrack(queueButton.parentElement);
+      return;
+    }
+    var track = e.target.closest('.card');
+    if (track && track.dataset.id) openEmbeddedPlayer(track);
+  });
+
+  el.collectionBack.addEventListener('click', function () {
+    el.collectionDetail.hidden = true;
+    el.homeDashboard.hidden = false;
   });
 
   function enqueueTrack(cardEl) {
@@ -642,12 +789,7 @@
   refreshIcons();
   renderQueue();
   loadSettings().then(function () {
-    state.query = 'Top Hits';
-    state.page = 1;
-    state.requestId += 1;
-    el.resultsSkeleton.hidden = false;
-    el.results.hidden = true;
-    fetchSearch();
+    loadHome();
     restoreMiniPlayer();
   });
 })();

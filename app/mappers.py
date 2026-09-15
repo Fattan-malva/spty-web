@@ -48,6 +48,8 @@ def extract_artists(value):
 def extract_thumbnail(album):
     album = album or {}
     sources = album.get("coverArt", {}).get("sources", [])
+    if not sources:
+        sources = album.get("images") or []
     return best_image(sources)
 
 

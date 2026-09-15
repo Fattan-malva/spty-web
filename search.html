@@ -58,6 +58,42 @@
 
       <div class="hint" id="hint" hidden></div>
 
+      <div class="home-dashboard" id="homeDashboard">
+        <div class="home-heading">
+          <div>
+            <p class="eyebrow">Koleksi kamu</p>
+            <h1>Selamat datang kembali</h1>
+          </div>
+          <span class="home-status" id="homeStatus">Memuat...</span>
+        </div>
+        <section class="home-section">
+          <div class="section-heading"><h2>Album populer</h2><span>Untuk kamu</span></div>
+          <div class="media-rail" id="popularAlbums"></div>
+        </section>
+        <section class="home-section">
+          <div class="section-heading"><h2>Playlist kamu</h2><span>Disimpan di akun</span></div>
+          <div class="media-rail" id="accountPlaylists"></div>
+        </section>
+        <section class="home-section liked-section">
+          <div class="section-heading"><h2>Lagu yang kamu sukai</h2><span>Putar dari koleksi</span></div>
+          <div class="liked-list" id="likedSongs"></div>
+        </section>
+      </div>
+
+      <section class="collection-detail" id="collectionDetail" hidden>
+        <div class="collection-detail-head">
+          <button id="collectionBack" title="Kembali ke home" aria-label="Kembali ke home">
+            <i data-lucide="arrow-left"></i>
+          </button>
+          <div>
+            <p class="eyebrow" id="collectionType">Koleksi</p>
+            <h2 id="collectionTitle">Daftar lagu</h2>
+          </div>
+          <span id="collectionCount"></span>
+        </div>
+        <div class="collection-track-list" id="collectionTracks"></div>
+      </section>
+
       <div class="results" id="results">
         <section class="top-results" id="topResults" hidden>
           <h2>Hasil teratas</h2>

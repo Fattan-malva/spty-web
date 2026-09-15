@@ -41,6 +41,29 @@ async def get_settings():
     return settings.load_settings()
 
 
+@router.get("/home")
+async def home(request: Request, sp_dc: Optional[str] = Query(None)):
+    room_sp_dc = _require(request, sp_dc)
+    if isinstance(room_sp_dc, HTMLResponse):
+        return room_sp_dc
+    return await services.fetch_home(request.app, room_sp_dc)
+
+
+@router.get("/collection/{item_type}/{item_id}")
+async def collection(request: Request, item_type: str, item_id: str,
+                     sp_dc: Optional[str] = Query(None)):
+    room_sp_dc = _require(request, sp_dc)
+    if isinstance(room_sp_dc, HTMLResponse):
+        return room_sp_dc
+    return {
+        "type": item_type,
+        "id": item_id,
+        "tracks": await services.fetch_collection(
+            request.app, item_type, item_id, room_sp_dc
+        ),
+    }
+
+
 @router.put("/settings")
 async def put_settings(request: Request):
     try:
