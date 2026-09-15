@@ -1,26 +1,110 @@
-/* The mini player uses the real player.html iframe as its only playback owner. */
-.mini-player.streaming iframe {
-  display: block !important;
+/* The mini player owns one player.html iframe. */
+.mini-player {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 120;
+  width: min(380px, calc(100vw - 32px));
+  height: 96px;
+  min-height: 96px;
+  padding: 0;
+  overflow: hidden;
+  display: block;
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 12px;
+  background: #181818;
+  box-shadow: 0 16px 44px rgba(0, 0, 0, .55);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 }
 
 .mini-player iframe {
-  width: 100%;
-  min-height: 128px;
-  height: 128px;
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  margin: 0;
+  padding: 0;
   border: 0;
-  border-radius: 8px;
+  border-radius: 0;
+  display: block !important;
   background: #181818;
+}
+
+/* Keep the action buttons above the embedded player. */
+.mini-player #miniLyrics,
+.mini-player #miniClose {
+  position: absolute;
+  top: 8px;
+  z-index: 3;
+  width: 30px;
+  height: 30px;
+  margin: 0;
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, .58);
+  color: #fff;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.mini-player #miniLyrics {
+  right: 44px;
+}
+
+.mini-player #miniClose {
+  right: 8px;
+}
+
+.mini-player #miniLyrics:hover,
+.mini-player #miniClose:hover {
+  background: rgba(0, 0, 0, .78);
+}
+
+/* The old outer title/artwork are redundant because player.html renders its
+   own compact embedded player. Keep them in the DOM for compatibility. */
+.mini-player > .mini-artwork,
+.mini-player > .mini-copy {
+  display: none !important;
+}
+
+.mini-player.expanded {
+  inset: 0;
+  right: 0;
+  bottom: 0;
+  width: 100vw;
+  max-width: none;
+  height: 100dvh;
+  min-height: 100dvh;
+  border: 0;
+  border-radius: 0;
+  background: #0e0e0f;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.mini-player.expanded #miniLyrics {
+  display: none;
+}
+
+.mini-player.expanded #miniClose {
+  display: none;
+}
+
+.mini-player.expanded iframe {
+  width: 100% !important;
+  height: 100% !important;
 }
 
 @media (max-width: 560px) {
   .mini-player {
-    right: 10px;
-    bottom: 10px;
-    width: calc(100vw - 20px);
-  }
-
-  .mini-player iframe {
-    height: 118px;
-    min-height: 118px;
+    right: 8px;
+    bottom: 8px;
+    width: calc(100vw - 16px);
+    height: 92px;
+    min-height: 92px;
+    border-radius: 10px;
   }
 }
