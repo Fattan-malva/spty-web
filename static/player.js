@@ -196,24 +196,25 @@
 
   function playNextQueued() {
     if (state.queueAdvancePending) return true;
-    try {
-      var queue = JSON.parse(localStorage.getItem('spotifyQueue') || '[]');
-      if (!queue.length) return false;
+    if (window.queueRuntime && typeof window.queueRuntime.next === 'function') {
       state.queueAdvancePending = true;
-      var next = queue.shift();
-      localStorage.setItem('spotifyQueue', JSON.stringify(queue));
-      var newUrl = '/player?trackId=' + encodeURIComponent(next.trackId) +
-        (state.embedded ? '&embedded=1' : '') + (state.mini ? '&mini=1' : '');
-      history.replaceState(state.embedded ? null : { playerPage: true }, '', newUrl);
-      openPlayer(next.trackId);
+      window.queueRuntime.next().then(function (next) {
+        if (!next) {
+          state.queueAdvancePending = false;
+          return;
+        }
+        var newUrl = '/player?trackId=' + encodeURIComponent(next.trackId) +
+          (state.embedded ? '&embedded=1' : '') + (state.mini ? '&mini=1' : '');
+        history.replaceState(state.embedded ? null : { playerPage: true }, '', newUrl);
+        state.queueAdvancePending = false;
+        openPlayer(next.trackId);
+      }).catch(function (error) {
+        console.error('[PLAYER] queue next failed', error);
+        state.queueAdvancePending = false;
+      });
       return true;
-    } catch (e) {
-      return false;
     }
-  }
-
-  function readQueue() {
-    try { return JSON.parse(localStorage.getItem('spotifyQueue') || '[]'); } catch (e) { return []; }
+    return false;
   }
 
   function escapeHtml(value) {
@@ -222,35 +223,7 @@
     });
   }
 
-  function renderQueue() {
-    var list = document.getElementById('queueList');
-    var empty = document.getElementById('queueEmpty');
-    var count = document.getElementById('queueCount');
-    if (!list || !empty || !count) return;
-    var queue = readQueue();
-    list.innerHTML = '';
-    empty.hidden = queue.length > 0;
-    count.textContent = queue.length;
-    count.hidden = queue.length === 0;
-    queue.forEach(function (item, index) {
-      var row = document.createElement('div');
-      row.className = 'queue-item';
-      row.dataset.index = index;
-      row.dataset.trackId = item.trackId || '';
-      row.title = 'Putar sekarang';
-      row.innerHTML = (item.thumbnail ? '<img class="queue-thumb" src="' + escapeHtml(item.thumbnail) + '" alt="">' : '<span class="queue-thumb queue-thumb-empty"><i data-lucide="music"></i></span>') +
-        '<span class="queue-item-copy"><strong>' + escapeHtml(item.title || 'Unknown') + '</strong><small>' + escapeHtml(item.artist || '') + '</small></span>' +
-        '<button class="queue-remove" data-index="' + index + '" title="Hapus dari antrean" aria-label="Hapus dari antrean"><i data-lucide="x"></i></button>';
-      list.appendChild(row);
-    });
-    if (window.lucide) window.lucide.createIcons();
-  }
-
   function goBack() {
-    state.playhead = state.playhead || 0;
-    var isPlaying = state.isPlaying;
-    rememberPlayback();
-
     if (state.mini) {
       window.parent.postMessage({ type: 'collapse-mini-request' }, location.origin);
       return;
@@ -266,7 +239,7 @@
           title: el.pvTitle.textContent || '',
           artist: el.pvArtist.textContent || '',
           positionMs: Math.max(0, Math.round(state.playhead || 0)),
-          playing: isPlaying
+          playing: state.isPlaying
         }
       }, location.origin);
       return;
@@ -274,12 +247,8 @@
     location.replace('/');
   }
 
-  function getEmbedDoc() {
-    try { return el.spWidget.contentDocument || null; } catch (e) { return null; }
-  }
-
   function renderLyrics() {
-    if (!state.lyrics || !state.lyrics.lines) return;
+    if (!state.lyrics || !Array.isArray(state.lyrics.lines)) return;
     el.pvLyrics.innerHTML = '';
     state.lyrics.lines.forEach(function (ln) {
       var d = document.createElement('div');
@@ -293,18 +262,21 @@
   }
 
   function seekTo(ms) {
+    state.playhead = ms;
+    updateActiveLine(ms);
     try {
-      var payload = { type: 'seek-request', position: ms, trackId: state.trackId };
-      el.spWidget.contentWindow.postMessage(payload, location.origin);
-      state.playhead = ms;
-      updateActiveLine(ms);
+      el.spWidget.contentWindow.postMessage({ type: 'seek-request', position: ms, trackId: state.trackId }, '*');
     } catch (e) {}
   }
 
   function updateActiveLine(pos) {
-    if (!state.lyrics || !state.lyrics.hasSync) return;
-    var lines = state.lyrics.lines;
-    if (!lines || !lines.length) return;
+    if (!state.lyrics || !state.lyrics.hasSync || !el.pvLyrics || !el.pvLyricsWrap) return;
+    var lines = Array.isArray(state.lyrics.lines) ? state.lyrics.lines : [];
+    if (!lines.length) return;
+
+    var children = el.pvLyrics.children;
+    if (!children || !children.length) return;
+
     var idx = -1;
     for (var i = 0; i < lines.length; i++) {
       if (pos >= lines[i].startMs && (i === lines.length - 1 || pos < lines[i + 1].startMs)) {
@@ -312,16 +284,19 @@
         break;
       }
     }
+
     if (idx === state.activeLine) return;
     state.activeLine = idx;
-    var els = el.pvLyrics.children;
-    for (var j = 0; j < els.length; j++) {
+
+    for (var j = 0; j < children.length; j++) {
       var on = j === idx;
-      els[j].classList.toggle('active', on);
-      els[j].classList.toggle('dim', !on);
+      children[j].classList.toggle('active', on);
+      children[j].classList.toggle('dim', !on);
     }
-    if (idx >= 0) {
-      var lineEl = els[idx];
+
+    if (idx >= 0 && idx < children.length) {
+      var lineEl = children[idx];
+      if (!lineEl) return;
       el.pvLyricsWrap.scrollTo({
         top: lineEl.offsetTop - el.pvLyricsWrap.clientHeight / 2 + lineEl.clientHeight / 2,
         behavior: 'smooth'
@@ -350,7 +325,18 @@
     if (e.origin !== location.origin || !e.data) return;
     var d = e.data;
     var payload = d.payload || d.data || d;
-    var position = payload && typeof payload.position === 'number' ? payload.position : null;
+
+    if (d.type === 'spotify-ended') {
+      console.log('[PLAYER] spotify-ended received', payload);
+      playNextQueued();
+      return;
+    }
+
+    if (d.type === 'queue-ended-local') {
+      console.log('[PLAYER] queue-ended-local received', payload);
+      playNextQueued();
+      return;
+    }
 
     if (d.type === 'playback_started') {
       state.isPlaying = true;
@@ -360,6 +346,10 @@
       return;
     }
 
+    var position = payload && typeof payload.position === 'number'
+      ? payload.position
+      : (payload && typeof payload.positionMs === 'number' ? payload.positionMs : null);
+
     if (d.type === 'playback_update' && position !== null) {
       state.playhead = position;
       state.isPlaying = payload.isPaused !== true;
@@ -367,12 +357,6 @@
       state.lastMessageAt = Date.now();
       updateActiveLine(position);
     }
-  });
-
-  window.addEventListener('queue-ended-local', function (event) {
-    var detail = event.detail || {};
-    console.log('[PLAYER] queue-ended-local', detail);
-    playNextQueued();
   });
 
   window.addEventListener('pagehide', function () {
@@ -408,7 +392,6 @@
       el.pvTitle.textContent = 'sp_dc tidak ditemukan';
       el.pvArtist.textContent = 'Atur sp_dc di halaman pencarian';
     } else {
-      renderQueue();
       openPlayer(trackId);
     }
   });
