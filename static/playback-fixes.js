@@ -10,17 +10,15 @@
 
   function injectStyles() {
     if (document.getElementById('playback-fixes-style')) return;
-    var s = document.createElement('style');
-    s.id = 'playback-fixes-style';
-    s.textContent = '.mini-player{grid-template-columns:42px minmax(0,1fr) 30px 30px!important;width:min(380px,calc(100vw - 32px))!important;right:16px!important;bottom:16px!important;padding:8px!important;min-height:58px}.mini-player.streaming iframe{display:none!important}.mini-artwork{width:42px!important;height:42px!important;border-radius:6px!important;object-fit:cover!important;background:#282828;flex:none;display:block}.queue-thumb{width:36px!important;height:36px!important;min-width:36px!important;border-radius:4px!important;object-fit:cover!important;background:#282828;flex:none}.queue-thumb-empty{display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.4)}';
+    var s = document.createElement('style'); s.id = 'playback-fixes-style';
+    s.textContent = '.mini-player{grid-template-columns:42px minmax(0,1fr) 30px 30px!important;width:min(380px,calc(100vw - 32px))!important;right:16px!important;bottom:16px!important;padding:8px!important;min-height:58px}.mini-player.streaming iframe{display:none!important}.mini-artwork{width:42px!important;height:42px!important;border-radius:6px!important;object-fit:cover!important;background:#282828;flex:none;display:block}.queue-thumb{width:36px!important;height:36px!important;min-width:36px!important;border-radius:4px!important;object-fit:cover!important;background:#282828;flex:none}';
     document.head.appendChild(s);
   }
 
   function ensureMiniArtwork() {
     var mini = document.getElementById('miniPlayer'), copy = document.querySelector('.mini-copy');
     if (!mini || !copy || document.getElementById('miniArtwork')) return;
-    var img = document.createElement('img'); img.id = 'miniArtwork'; img.className = 'mini-artwork'; img.alt = ''; img.hidden = true;
-    mini.insertBefore(img, copy);
+    var img = document.createElement('img'); img.id = 'miniArtwork'; img.className = 'mini-artwork'; img.alt = ''; img.hidden = true; mini.insertBefore(img, copy);
   }
   function updateMiniArtwork(item) {
     var img = document.getElementById('miniArtwork'); if (!img) return;
@@ -34,10 +32,8 @@
       var item = queue[i], row = rows[i]; if (!item) continue;
       var old = row.querySelector('.queue-thumb');
       if (old) { if (item.thumbnail && old.src !== item.thumbnail) old.src = item.thumbnail; continue; }
-      var img = document.createElement('img'); img.className = 'queue-thumb'; img.alt = ''; img.loading = 'lazy';
-      if (item.thumbnail) img.src = item.thumbnail; else img.classList.add('queue-thumb-empty');
-      img.onerror = function () { this.style.visibility = 'hidden'; };
-      row.insertBefore(img, row.firstChild);
+      var img = document.createElement('img'); img.className = 'queue-thumb'; img.alt = ''; img.loading = 'lazy'; if (item.thumbnail) img.src = item.thumbnail;
+      img.onerror = function () { this.style.visibility = 'hidden'; }; row.insertBefore(img, row.firstChild);
     }
   }
   function startQueueObserver() {
@@ -47,35 +43,62 @@
 
   if (isSearch) {
     injectStyles(); ensureMiniArtwork(); startQueueObserver();
+    var mini = document.getElementById('miniPlayer');
+    var miniLyrics = document.getElementById('miniLyrics');
+    var miniClose = document.getElementById('miniClose');
+
     function forceMiniVisible() {
-      var saved = readPlayback(), mini = document.getElementById('miniPlayer'); if (!mini || !saved || !saved.trackId) return;
+      var saved = readPlayback(); if (!mini || !saved || !saved.trackId || saved.playing !== true) return;
       var title = document.getElementById('miniTitle'), artist = document.getElementById('miniArtist');
       if (title) title.textContent = saved.title || 'Sedang diputar';
       if (artist) artist.textContent = saved.artist || '';
       updateMiniArtwork(saved); mini.classList.add('streaming'); mini.hidden = false;
       if (window.lucide) window.lucide.createIcons();
     }
-    // Capture before search.js receives player-back, so its missing thumbnail cannot erase ours.
+
+    function openLyrics() {
+      var saved = readPlayback();
+      if (!saved || !saved.trackId) return;
+      var frame = document.getElementById('playerFrame');
+      if (!frame) return;
+      // Re-open the same track in the embedded player so the lyrics page follows the current song.
+      frame.src = '/player?trackId=' + encodeURIComponent(saved.trackId) + '&embedded=1';
+      frame.hidden = false;
+      frame.classList.remove('is-background');
+      mini.hidden = true;
+      setTimeout(function () {
+        try { frame.contentWindow.postMessage({ type: 'restore-playback', playback: saved }, location.origin); } catch (e) {}
+      }, 600);
+    }
+
+    function closeMini() {
+      var frame = document.getElementById('playerFrame');
+      if (frame) {
+        try { frame.contentWindow.postMessage({ type: 'stop-playback' }, location.origin); } catch (e) {}
+        frame.src = 'about:blank'; frame.hidden = true; frame.classList.remove('is-background');
+      }
+      var miniFrame = document.getElementById('miniFrame'); if (miniFrame) miniFrame.src = 'about:blank';
+      if (mini) { mini.hidden = true; mini.classList.remove('streaming'); }
+      localStorage.removeItem('spotifyPlayback');
+    }
+
+    if (miniLyrics) miniLyrics.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); openLyrics(); });
+    if (miniClose) miniClose.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); closeMini(); });
+
     window.addEventListener('message', function (e) {
-      if (e.origin !== location.origin || !e.data || e.data.type !== 'player-back') return;
-      var incoming = e.data.playback || {}, before = readPlayback() || {}, merged = Object.assign({}, before, incoming);
-      if (!incoming.thumbnail && before.thumbnail) merged.thumbnail = before.thumbnail;
-      if (!incoming.title && before.title) merged.title = before.title;
-      if (!incoming.artist && before.artist) merged.artist = before.artist;
-      if (merged.trackId) localStorage.setItem('spotifyPlayback', JSON.stringify(merged));
-      setTimeout(forceMiniVisible, 0); setTimeout(forceMiniVisible, 120);
+      if (e.origin !== location.origin || !e.data) return;
+      if (e.data.type === 'player-back' || e.data.type === 'playback-state') {
+        if (e.data.playback && e.data.playback.trackId) localStorage.setItem('spotifyPlayback', JSON.stringify(e.data.playback));
+        setTimeout(forceMiniVisible, 0); setTimeout(forceMiniVisible, 120);
+      }
     }, true);
-    window.addEventListener('message', function (e) {
-      if (e.origin !== location.origin || !e.data || e.data.type !== 'playback-state') return;
-      if (e.data.playback && e.data.playback.trackId) localStorage.setItem('spotifyPlayback', JSON.stringify(e.data.playback));
-      setTimeout(forceMiniVisible, 0);
-    });
     window.addEventListener('popstate', function () { setTimeout(forceMiniVisible, 0); setTimeout(forceMiniVisible, 120); });
     window.addEventListener('pageshow', function () { setTimeout(forceMiniVisible, 0); });
     var queueBtn = document.getElementById('queueBtn'); if (queueBtn) queueBtn.addEventListener('click', function () { setTimeout(decorateQueueItems, 0); });
     setInterval(function () { decorateQueueItems(); forceMiniVisible(); }, 250);
   }
 
+  // Never render a mini player on the standalone player page.
   if (isPlayer) {
     injectStyles(); startQueueObserver();
     var frame = document.getElementById('spWidget'), lastHandledTrack = '', lastEndedAt = 0;
