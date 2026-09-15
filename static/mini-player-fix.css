@@ -6,8 +6,8 @@
  */
 .mini-player {
   position: fixed !important;
-  right: 16px !important;
-  bottom: 16px !important;
+  right: 8px !important;
+  bottom: 8px !important;
   z-index: 120 !important;
   width: min(460px, calc(100vw - 32px)) !important;
   height: 132px !important;
@@ -60,6 +60,7 @@
   transform: none !important;
   box-shadow: none !important;
   backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
   -webkit-backdrop-filter: blur(10px) !important;
 }
 
