@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Environment and local credentials
+.env
+.env.*
+!.env.example
+settings.json
+
+# Playwright and test artifacts
+test-results/
+playwright-report/
+blob-report/
+
+# Local caches and generated files
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.log
+
+# IDE and OS files
+.vscode/
+.idea/
+*.code-workspace
+.DS_Store
+Thumbs.db

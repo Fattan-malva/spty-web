@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Spotify Player</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+
+<body class="page-player">
+
+  <div class="pv-top">
+    <button id="btnBack" class="btn" title="Kembali" aria-label="Kembali">
+      <i data-lucide="arrow-left"></i>
+    </button>
+    <div class="pv-now">
+      <div class="t" id="pvTitle">-</div>
+      <div class="a" id="pvArtist"></div>
+    </div>
+    <button id="queueBtn" class="btn" title="Antrean" aria-label="Antrean">
+      <i data-lucide="list-music"></i>
+      <span id="queueCount" hidden>0</span>
+    </button>
+  </div>
+
+  <div class="queue-panel player-queue-panel" id="queuePanel" hidden>
+    <div class="queue-panel-head">
+      <h3>Antrean berikutnya</h3>
+      <button id="queueClear" title="Kosongkan antrean" aria-label="Kosongkan antrean">
+        <i data-lucide="trash-2"></i>
+      </button>
+    </div>
+    <div class="queue-list" id="queueList"></div>
+    <p class="queue-empty" id="queueEmpty">Belum ada lagu di antrean.</p>
+  </div>
+
+  <div id="pvBody">
+    <div class="pv-loading" id="pvLoading">
+      <i class="fa-solid fa-spinner fa-pulse"></i>
+      <span>Memuat...</span>
+    </div>
+
+    <div class="lyrics-outer" id="lyricsOuter">
+      <div class="lyrics-viewport" id="pvLyricsWrap">
+        <div id="pvLyrics"></div>
+      </div>
+    </div>
+
+    <div class="embed-panel" id="embedPanel">
+      <iframe id="spWidget" allow="autoplay *; encrypted-media; fullscreen; picture-in-picture; web-share"
+        allowfullscreen frameborder="0" loading="eager"></iframe>
+    </div>
+  </div>
+
+  <div class="gate" id="gate">
+    <div class="gate-card">
+      <div class="gicon"><i class="fa-solid fa-headphones"></i></div>
+      <h2>sp_dc Diperlukan</h2>
+      <p>Untuk memutar lagu, atur sp_dc terlebih dahulu lewat ikon pengaturan di halaman pencarian.</p>
+      <button id="gateBack">Kembali ke Pencarian</button>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="/static/player.js"></script>
+</body>
+
+</html>
