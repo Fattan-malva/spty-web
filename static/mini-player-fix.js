@@ -11,7 +11,6 @@
   var artwork = document.getElementById('miniArtwork');
   var lyrics = document.getElementById('miniLyrics');
   var close = document.getElementById('miniClose');
-  var playerFrame = document.getElementById('playerFrame');
 
   if (!mini || !frame || !lyrics || !close) return;
 
@@ -32,8 +31,8 @@
 
   function updateHeader(value) {
     if (!value) return;
-    title.textContent = value.title || 'Sedang diputar';
-    artist.textContent = value.artist || '';
+    if (title) title.textContent = value.title || 'Sedang diputar';
+    if (artist) artist.textContent = value.artist || '';
     if (artwork) {
       artwork.src = value.thumbnail || '';
       artwork.hidden = !value.thumbnail;
@@ -47,7 +46,8 @@
   function showMini(value, reloadFrame) {
     if (!value || !value.trackId) return;
     updateHeader(value);
-    mini.classList.remove('streaming');
+    mini.classList.remove('expanded');
+    mini.classList.add('streaming');
     mini.hidden = false;
 
     if (reloadFrame && frame.dataset.trackId !== value.trackId) {
@@ -69,31 +69,45 @@
     };
 
     writePlayback(playback);
-
-    if (playerFrame) {
-      playerFrame.src = 'about:blank';
-      playerFrame.hidden = true;
-      playerFrame.classList.remove('is-background');
-    }
-
     frame.dataset.trackId = playback.trackId;
     frame.src = frameUrl(playback.trackId);
     updateHeader(playback);
-    mini.classList.remove('streaming');
+    mini.classList.remove('expanded');
+    mini.classList.add('streaming');
     mini.hidden = false;
   }
 
-  function goToFullPlayer() {
+  function expandForLyrics() {
     var playback = readPlayback();
     if (!playback || !playback.trackId) return;
 
-    /* Let the embedded player flush its latest playhead before navigation. */
+    mini.classList.add('expanded');
+    mini.classList.remove('streaming');
+    mini.hidden = false;
+
+    /* Keep the exact same player iframe alive. Only its view changes. */
     try {
-      frame.contentWindow.postMessage({ type: 'flush-playback' }, location.origin);
+      frame.contentWindow.postMessage({
+        type: 'expand-lyrics-view',
+        playback: playback
+      }, location.origin);
     } catch (e) {}
 
-    /* Keep the current track in storage; player.html will load it directly. */
-    window.location.assign('/player?trackId=' + encodeURIComponent(playback.trackId));
+    history.pushState({ miniLyrics: true }, '', '/player?trackId=' + encodeURIComponent(playback.trackId));
+  }
+
+  function collapseLyrics(updateHistory) {
+    mini.classList.remove('expanded');
+    mini.classList.add('streaming');
+    mini.hidden = false;
+
+    try {
+      frame.contentWindow.postMessage({ type: 'collapse-mini-view' }, location.origin);
+    } catch (e) {}
+
+    if (updateHistory && location.pathname === '/player') {
+      history.back();
+    }
   }
 
   function closeMini() {
@@ -103,10 +117,13 @@
     frame.src = 'about:blank';
     frame.removeAttribute('data-track-id');
     mini.hidden = true;
-    mini.classList.remove('streaming');
+    mini.classList.remove('streaming', 'expanded');
     try {
       localStorage.removeItem('spotifyPlayback');
     } catch (e) {}
+    if (location.pathname === '/player') {
+      history.replaceState(null, '', '/');
+    }
   }
 
   function restore() {
@@ -118,13 +135,17 @@
     showMini(playback, true);
   }
 
-  /* Capture phase prevents the older search.js click handlers from opening the
-     fullscreen playerFrame. There is now only one playback iframe. */
+  /* Capture phase prevents the older search.js click handlers from opening a
+     second fullscreen player. There is now exactly one playback iframe. */
   document.addEventListener('click', function (event) {
-    var queueButton = event.target.closest && event.target.closest('.queue-next');
+    var target = event.target;
+    var closest = target && target.closest ? target.closest.bind(target) : null;
+    if (!closest) return;
+
+    var queueButton = closest('.queue-next');
     if (queueButton) return;
 
-    var card = event.target.closest && event.target.closest('.card');
+    var card = closest('.card');
     if (card && card.dataset.id) {
       event.preventDefault();
       event.stopImmediatePropagation();
@@ -132,7 +153,7 @@
       return;
     }
 
-    var suggestion = event.target.closest && event.target.closest('.suggestion-item');
+    var suggestion = closest('.suggestion-item');
     if (suggestion && suggestion.dataset.id) {
       event.preventDefault();
       event.stopImmediatePropagation();
@@ -140,18 +161,19 @@
       return;
     }
 
-    var remove = event.target.closest && event.target.closest('.queue-remove');
+    var remove = closest('.queue-remove');
     if (remove) return;
 
-    var queueRow = event.target.closest && event.target.closest('.queue-item');
+    var queueRow = closest('.queue-item');
     if (queueRow && queueRow.dataset.index != null) {
       event.preventDefault();
       event.stopImmediatePropagation();
       var queue;
       try { queue = JSON.parse(localStorage.getItem('spotifyQueue') || '[]'); } catch (e) { queue = []; }
-      var item = queue[Number(queueRow.dataset.index)];
+      var index = Number(queueRow.dataset.index);
+      var item = queue[index];
       if (item && item.trackId) {
-        queue.splice(Number(queueRow.dataset.index), 1);
+        queue.splice(index, 1);
         localStorage.setItem('spotifyQueue', JSON.stringify(queue));
         openMini({
           dataset: {
@@ -167,14 +189,14 @@
       return;
     }
 
-    if (event.target.closest && event.target.closest('#miniLyrics')) {
+    if (closest('#miniLyrics')) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      goToFullPlayer();
+      expandForLyrics();
       return;
     }
 
-    if (event.target.closest && event.target.closest('#miniClose')) {
+    if (closest('#miniClose')) {
       event.preventDefault();
       event.stopImmediatePropagation();
       closeMini();
@@ -188,7 +210,21 @@
       writePlayback(event.data.playback);
       updateHeader(event.data.playback);
       mini.hidden = false;
-      mini.classList.remove('streaming');
+      if (!mini.classList.contains('expanded')) mini.classList.add('streaming');
+      return;
+    }
+
+    if (event.data.type === 'collapse-mini-request') {
+      collapseLyrics(false);
+      if (location.pathname === '/player') {
+        history.back();
+      }
+    }
+  });
+
+  window.addEventListener('popstate', function () {
+    if (location.pathname === '/player' && mini.classList.contains('expanded')) {
+      collapseLyrics(false);
     }
   });
 
@@ -196,6 +232,5 @@
     setTimeout(restore, 0);
   });
 
-  /* On a fresh search page load, restore immediately as well. */
   setTimeout(restore, 0);
 })();
