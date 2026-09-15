@@ -135,7 +135,7 @@
       startMonitor();
     };
 
-    el.spWidget.src = '/embed-proxy?trackId=' + encodeURIComponent(trackId) + credQ();
+    el.spWidget.src = '/embed-proxy?trackId=' + encodeURIComponent(trackId) + '&bridge=2' + credQ();
 
     api('/track?trackId=' + encodeURIComponent(trackId) + credQ())
       .then(function (full) {
