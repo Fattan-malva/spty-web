@@ -62,12 +62,8 @@
     if (window.lucide) window.lucide.createIcons();
   }
 
-  function readQueue() {
-    try { return JSON.parse(localStorage.getItem('spotifyQueue') || '[]'); } catch (e) { return []; }
-  }
-
   function renderQueue() {
-    var queue = readQueue();
+    var queue = window.SpotifyQueue ? window.SpotifyQueue.get() : [];
     el.queueList.innerHTML = '';
     el.queueEmpty.hidden = queue.length > 0;
     el.queueCount.textContent = queue.length;
@@ -358,23 +354,19 @@
 
   function enqueueTrack(cardEl) {
     if (!cardEl || !cardEl.dataset.id) return;
-    try {
-      var queue = JSON.parse(localStorage.getItem('spotifyQueue') || '[]');
-      if (queue.some(function (item) { return item.trackId === cardEl.dataset.id; })) {
-        toast('Lagu sudah ada di antrean');
-        return;
-      }
-      queue.push({
-        trackId: cardEl.dataset.id,
-        title: cardEl.dataset.title,
-        artist: cardEl.dataset.artist,
-        thumbnail: cardEl.dataset.thumbnail
+    var item = {
+      trackId: cardEl.dataset.id,
+      title: cardEl.dataset.title || '',
+      artist: cardEl.dataset.artist || '',
+      thumbnail: cardEl.dataset.thumbnail || ''
+    };
+    window.SpotifyQueue.add(item)
+      .then(function () {
+        toast('Ditambahkan ke antrean berikutnya');
+      })
+      .catch(function () {
+        toast('Antrean tidak tersedia');
       });
-      localStorage.setItem('spotifyQueue', JSON.stringify(queue));
-      toast('Ditambahkan ke antrean berikutnya');
-    } catch (e) {
-      toast('Antrean tidak tersedia');
-    }
   }
 
   el.suggestions.addEventListener('click', function (e) {
@@ -549,10 +541,9 @@
     var remove = e.target.closest('.queue-remove');
     if (remove) {
       e.stopPropagation();
-      var queue = readQueue();
-      queue.splice(Number(remove.dataset.index), 1);
-      localStorage.setItem('spotifyQueue', JSON.stringify(queue));
-      renderQueue();
+      window.SpotifyQueue.remove(Number(remove.dataset.index)).catch(function () {
+        toast('Antrean tidak tersedia');
+      });
       return;
     }
     var row = e.target.closest('.queue-item');
@@ -561,27 +552,28 @@
   });
 
   function playQueueItem(index) {
-    var queue = readQueue();
-    var item = queue[index];
+    var item = window.SpotifyQueue.get()[index];
     if (!item || !item.trackId) return;
     // Lagu yang diputar langsung dari antrean harus hilang dari antrean.
-    queue.splice(index, 1);
-    localStorage.setItem('spotifyQueue', JSON.stringify(queue));
-    renderQueue();
-    el.queuePanel.hidden = true;
-    openEmbeddedPlayer({
-      dataset: {
-        id: item.trackId,
-        title: item.title || '',
-        artist: item.artist || '',
-        thumbnail: item.thumbnail || ''
-      }
+    window.SpotifyQueue.remove(index).then(function () {
+      el.queuePanel.hidden = true;
+      openEmbeddedPlayer({
+        dataset: {
+          id: item.trackId,
+          title: item.title || '',
+          artist: item.artist || '',
+          thumbnail: item.thumbnail || ''
+        }
+      });
+    }).catch(function () {
+      toast('Antrean tidak tersedia');
     });
   }
 
   el.queueClear.addEventListener('click', function () {
-    localStorage.removeItem('spotifyQueue');
-    renderQueue();
+    window.SpotifyQueue.clear().catch(function () {
+      toast('Antrean tidak tersedia');
+    });
   });
 
   document.addEventListener('click', function (e) {
@@ -644,7 +636,13 @@
   // ---------- INIT ----------
   el.miniPlayer.hidden = true;
   refreshIcons();
-  renderQueue();
+  if (window.SpotifyQueue) {
+    window.SpotifyQueue.start();
+    window.SpotifyQueue.subscribe(function () { renderQueue(); });
+    window.SpotifyQueue.refresh();
+  } else {
+    renderQueue();
+  }
   loadSettings().then(function () {
     restoreMiniPlayer();
   });

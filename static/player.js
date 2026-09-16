@@ -200,24 +200,26 @@
 
   function playNextQueued() {
     if (state.queueAdvancePending) return true;
-    try {
-      var queue = JSON.parse(localStorage.getItem('spotifyQueue') || '[]');
-      if (!queue.length) return false;
-      state.queueAdvancePending = true;
-      var next = queue.shift();
-      localStorage.setItem('spotifyQueue', JSON.stringify(queue));
-      var newUrl = '/player?trackId=' + encodeURIComponent(next.trackId) +
-        (state.embedded ? '&embedded=1' : '') + (state.mini ? '&mini=1' : '');
-      history.replaceState(state.embedded ? null : { playerPage: true }, '', newUrl);
-      openPlayer(next.trackId);
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  function readQueue() {
-    try { return JSON.parse(localStorage.getItem('spotifyQueue') || '[]'); } catch (e) { return []; }
+    var queue = window.SpotifyQueue ? window.SpotifyQueue.get() : [];
+    if (!queue.length) return false;
+    state.queueAdvancePending = true;
+    window.SpotifyQueue.shift()
+      .then(function (res) {
+        state.queueAdvancePending = false;
+        var next = res && res.shifted;
+        if (!next || !next.trackId) {
+          toast('Antrean habis');
+          return;
+        }
+        var newUrl = '/player?trackId=' + encodeURIComponent(next.trackId) +
+          (state.embedded ? '&embedded=1' : '') + (state.mini ? '&mini=1' : '');
+        history.replaceState(state.embedded ? null : { playerPage: true }, '', newUrl);
+        openPlayer(next.trackId);
+      })
+      .catch(function () {
+        state.queueAdvancePending = false;
+      });
+    return true;
   }
 
   function escapeHtml(value) {
@@ -231,7 +233,7 @@
     var empty = document.getElementById('queueEmpty');
     var count = document.getElementById('queueCount');
     if (!list || !empty || !count) return;
-    var queue = readQueue();
+    var queue = window.SpotifyQueue ? window.SpotifyQueue.get() : [];
     list.innerHTML = '';
     empty.hidden = queue.length > 0;
     count.textContent = queue.length;
@@ -536,42 +538,43 @@
     ensurePlaying(4);
   });
 
-  var queueBtn = document.getElementById('queueBtn');
-  var queuePanel = document.getElementById('queuePanel');
-  var queueList = document.getElementById('queueList');
-  var queueClear = document.getElementById('queueClear');
-  if (queueBtn && queuePanel && queueList && queueClear) {
-    queueBtn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      queuePanel.hidden = !queuePanel.hidden;
-      if (!queuePanel.hidden) renderQueue();
-    });
-    queueList.addEventListener('click', function (e) {
-      var remove = e.target.closest('.queue-remove');
-      if (remove) {
+var queueBtn = document.getElementById('queueBtn');
+    var queuePanel = document.getElementById('queuePanel');
+    var queueList = document.getElementById('queueList');
+    var queueClear = document.getElementById('queueClear');
+    if (queueBtn && queuePanel && queueList && queueClear) {
+      queueBtn.addEventListener('click', function (e) {
         e.stopPropagation();
-        var queue = readQueue();
-        queue.splice(Number(remove.dataset.index), 1);
-        localStorage.setItem('spotifyQueue', JSON.stringify(queue));
-        renderQueue();
-        return;
-      }
-      var row = e.target.closest('.queue-item');
-      if (!row) return;
-      var index = Number(row.dataset.index);
-      var queue = readQueue();
-      var item = queue[index];
-      if (!item || !item.trackId) return;
-      queue.splice(index, 1);
-      localStorage.setItem('spotifyQueue', JSON.stringify(queue));
-      queuePanel.hidden = true;
-      openPlayer(item.trackId);
-    });
-    queueClear.addEventListener('click', function () {
-      localStorage.removeItem('spotifyQueue');
-      renderQueue();
-    });
-  }
+        queuePanel.hidden = !queuePanel.hidden;
+        if (!queuePanel.hidden) renderQueue();
+      });
+      queueList.addEventListener('click', function (e) {
+        var remove = e.target.closest('.queue-remove');
+        if (remove) {
+          e.stopPropagation();
+          window.SpotifyQueue.remove(Number(remove.dataset.index)).catch(function () {
+            toast('Antrean tidak tersedia');
+          });
+          return;
+        }
+        var row = e.target.closest('.queue-item');
+        if (!row) return;
+        var index = Number(row.dataset.index);
+        var item = window.SpotifyQueue.get()[index];
+        if (!item || !item.trackId) return;
+        window.SpotifyQueue.remove(index).then(function () {
+          queuePanel.hidden = true;
+          openPlayer(item.trackId);
+        }).catch(function () {
+          toast('Antrean tidak tersedia');
+        });
+      });
+      queueClear.addEventListener('click', function () {
+        window.SpotifyQueue.clear().catch(function () {
+          toast('Antrean tidak tersedia');
+        });
+      });
+    }
 
   var trackId = params.get('trackId');
 
@@ -596,6 +599,12 @@
 
   document.title = 'Loading...';
   if (window.lucide) window.lucide.createIcons();
+
+  if (window.SpotifyQueue) {
+    window.SpotifyQueue.start();
+    window.SpotifyQueue.subscribe(function () { renderQueue(); });
+    window.SpotifyQueue.refresh();
+  }
 
   loadSettings().then(function () {
     if (!state.spDc) {

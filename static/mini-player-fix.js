@@ -157,16 +157,17 @@
     if (queueRow && queueRow.dataset.index != null) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      var queue;
-      try { queue = JSON.parse(localStorage.getItem('spotifyQueue') || '[]'); } catch (e) { queue = []; }
       var index = Number(queueRow.dataset.index);
-      var item = queue[index];
+      var item = null;
+      try { item = (window.SpotifyQueue ? window.SpotifyQueue.get() : [])[index]; } catch (e) { item = null; }
       if (item && item.trackId) {
-        queue.splice(index, 1);
-        localStorage.setItem('spotifyQueue', JSON.stringify(queue));
-        openMini({ dataset: { id: item.trackId, title: item.title || '', artist: item.artist || '', thumbnail: item.thumbnail || '' } });
-        var panel = document.getElementById('queuePanel');
-        if (panel) panel.hidden = true;
+        (window.SpotifyQueue ? window.SpotifyQueue.remove(index) : Promise.reject())
+          .then(function () {
+            openMini({ dataset: { id: item.trackId, title: item.title || '', artist: item.artist || '', thumbnail: item.thumbnail || '' } });
+            var panel = document.getElementById('queuePanel');
+            if (panel) panel.hidden = true;
+          })
+          .catch(function () {});
       }
       return;
     }

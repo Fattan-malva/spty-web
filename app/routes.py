@@ -1,10 +1,11 @@
+import asyncio
 import os
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 
-from . import config, services, settings, spdc
+from . import config, queue_store, services, settings, spdc
 from .config import MAX_LIMIT
 from .mappers import sanitize_track_id
 
@@ -46,6 +47,58 @@ async def put_settings(request: Request):
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON body")
     return settings.save_settings(body or {})
+
+
+def _queue_message(items) -> dict:
+    return {"queue": items, "count": len(items)}
+
+
+@router.get("/queue")
+async def get_queue():
+    return _queue_message(queue_store.load_queue())
+
+
+@router.post("/queue")
+async def post_queue(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    action = str(body.get("action") or "").strip()
+    result = await asyncio.to_thread(queue_store.mutate, action, body or {})
+    await queue_store.publish(result["items"])
+    response = _queue_message(result["items"])
+    if action == "shift" and result.get("shifted") is not None:
+        response["shifted"] = result["shifted"]
+    return response
+
+
+@router.get("/queue/stream")
+async def queue_stream(request: Request):
+    async def event_generator():
+        q = queue_store.subscribe()
+        try:
+            yield queue_store.event_message(queue_store.load_queue())
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    message = await asyncio.wait_for(q.get(), timeout=15)
+                    yield message
+                except asyncio.TimeoutError:
+                    yield ": ping\n\n"
+        finally:
+            queue_store.unsubscribe(q)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.get("/search")

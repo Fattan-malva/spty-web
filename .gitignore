@@ -16,6 +16,7 @@ ENV/
 .env.*
 !.env.example
 settings.json
+queue.json
 
 # Local caches and generated files
 .pytest_cache/
