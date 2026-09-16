@@ -4,6 +4,7 @@
   var state = {
     spDc: '',
     trackId: '',
+    trackDuration: 0,
     lyrics: null,
     lyricTimer: null,
     activeLine: -1,
@@ -12,10 +13,10 @@
     lastMessageAt: 0,
     autoplayPending: false,
     autoplayDone: false,
-    endedBound: false,
     embedMsg: false,
     isPlaying: false,
     queueAdvancePending: false,
+    autoAdvancing: false,
     embedded: params.get('embedded') === '1',
     mini: params.get('mini') === '1',
     expanded: false
@@ -105,6 +106,7 @@
       return;
     }
     state.trackId = trackId;
+    state.trackDuration = 0;
     state.lyrics = null;
     state.activeLine = -1;
     state.playhead = 0;
@@ -112,9 +114,9 @@
     state.lastMessageAt = 0;
     state.autoplayPending = false;
     state.autoplayDone = false;
-    state.endedBound = false;
     state.embedMsg = false;
     state.queueAdvancePending = false;
+    state.autoAdvancing = false;
     state.expanded = false;
 
     if (state.mini) {
@@ -176,6 +178,7 @@
     document.title = (t.title || 'Spotify') + ' - ' + (t.artist || '');
     el.pvTitle.textContent = t.title || '';
     el.pvArtist.textContent = t.artist || '';
+    if (t.durationMs) state.trackDuration = t.durationMs;
     rememberPlayback(t);
   }
 
@@ -201,13 +204,17 @@
   function playNextQueued() {
     if (state.queueAdvancePending) return true;
     var queue = window.SpotifyQueue ? window.SpotifyQueue.get() : [];
-    if (!queue.length) return false;
+    if (!queue.length) {
+      state.autoAdvancing = false;
+      return false;
+    }
     state.queueAdvancePending = true;
     window.SpotifyQueue.shift()
       .then(function (res) {
         state.queueAdvancePending = false;
         var next = res && res.shifted;
         if (!next || !next.trackId) {
+          state.autoAdvancing = false;
           toast('Antrean habis');
           return;
         }
@@ -218,6 +225,7 @@
       })
       .catch(function () {
         state.queueAdvancePending = false;
+        state.autoAdvancing = false;
       });
     return true;
   }
@@ -468,11 +476,31 @@
       d.type === 'playback_started' || d.type === 'playback_paused' ||
       d.type === 'playback_resumed' || d.type === 'playhead';
     if (embedType) state.embedMsg = true;
-    if (d.type === 'playback_started' || d.type === 'playback_resumed') state.isPlaying = true;
-    if (d.type === 'playback_paused') state.isPlaying = false;
+    if (d.type === 'playback_started' || d.type === 'playback_resumed') {
+      state.isPlaying = true;
+      state.autoAdvancing = false;
+    }
+    if (d.type === 'playback_paused') {
+      state.isPlaying = false;
+    }
     if (d.type === 'playback_update' || d.type === 'playback_resumed' || d.type === 'playback_paused') {
       if (typeof payload.isPaused === 'boolean') {
         state.isPlaying = !payload.isPaused;
+      }
+    }
+
+    // Auto-advance: when embed reports paused after having played,
+    // and position is near end, treat as track finished.
+    if ((d.type === 'playback_paused' || (d.type === 'playback_update' && payload.isPaused === true)) &&
+        state.trackDuration > 0 && state.playhead > 0 &&
+        !state.queueAdvancePending && !state.autoAdvancing) {
+      var progress = state.playhead / state.trackDuration;
+      if (progress >= 0.90) {
+        state.autoAdvancing = true;
+        state.isPlaying = false;
+        rememberPlayback();
+        playNextQueued();
+        return;
       }
     }
 
@@ -483,29 +511,24 @@
       state.useMsg = true;
       state.lastMessageAt = Date.now();
     }
+
+    // Capture duration from embed messages when available
+    var msgDur = payload.duration || payload.durationMs || payload.totalDuration;
+    if (typeof msgDur === 'number' && msgDur > 0) {
+      state.trackDuration = msgDur > 1000 ? msgDur : msgDur * 1000;
+    }
   });
 
   function startMonitor() {
     stopMonitor();
     state.lyricTimer = setInterval(function () {
-      var doc = getEmbedDoc();
-      if (doc && !state.endedBound) {
-        var media = doc.querySelector('audio, video');
-        if (media) {
-          state.endedBound = true;
-          media.addEventListener('ended', function () {
-            state.isPlaying = false;
-            rememberPlayback();
-            playNextQueued();
-          });
-        }
-      }
       // Status dari embed (embedMsg) sudah akurat lewat message; jangan
       // ditimpa hasil sampling DOM yang tidak menemukan elemen media apa pun.
       if (!state.embedMsg) {
         state.isPlaying = samplePlayhead();
       }
       rememberPlayback();
+
       if (state.lyrics && !document.documentElement.classList.contains('mini-embed')) {
         updateActiveLine(state.playhead);
       }
