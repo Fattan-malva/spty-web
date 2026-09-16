@@ -6,7 +6,6 @@ import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from playwright.async_api import async_playwright
 
 from . import config
 from .middleware import add_request_logging
@@ -15,7 +14,6 @@ from .routes import router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    config.PLAYWRIGHT_SEMAPHORE = asyncio.Semaphore(config.PLAYWRIGHT_CONCURRENCY)
     config.SPOTIFY_HTTP_SEMAPHORE = asyncio.Semaphore(config.SPOTIFY_HTTP_CONCURRENCY)
     config.EMBED_SEMAPHORE = asyncio.Semaphore(config.EMBED_CONCURRENCY)
 
@@ -30,28 +28,19 @@ async def lifespan(app: FastAPI):
                                        headers=config.SPOTIFY_HEADERS)
     app.state.token_cache = {}
     app.state.client_token_cache = {}
-    app.state.persisted_hashes = {}
+    app.state.persisted_hashes = dict(config.PERSISTED_HASHES)
+    app.state.totp_secrets = list(config.TOTP_SECRETS)
 
     config.log("Spotify API starting")
-    config.log(f"PLAYWRIGHT_CONCURRENCY={config.PLAYWRIGHT_CONCURRENCY}")
     config.log(f"SPOTIFY_HTTP_CONCURRENCY={config.SPOTIFY_HTTP_CONCURRENCY}")
     config.log(f"EMBED_CONCURRENCY={config.EMBED_CONCURRENCY}")
     config.log("strict per-room sp_dc mode")
 
-    async with async_playwright() as pw:
-        app.state.browser = await pw.chromium.launch(
-            headless=True,
-            args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu",
-                  "--disable-background-networking",
-                  "--disable-background-timer-throttling",
-                  "--disable-renderer-backgrounding",
-                  "--disable-features=Translate,BackForwardCache"],
-        )
-        yield
-        try: await app.state.http.aclose()
-        except Exception: pass
-        try: await app.state.browser.close()
-        except Exception: pass
+    yield
+    try:
+        await app.state.http.aclose()
+    except Exception:
+        pass
 
 
 app = FastAPI(

@@ -1,5 +1,4 @@
 import asyncio
-import re
 
 import httpx
 from fastapi import FastAPI, HTTPException
@@ -10,134 +9,6 @@ from .config import MAX_EMBED_CACHE, MAX_LYRICS_CACHE, MAX_TRACK_CACHE, cache_pu
 from .mappers import extract_search, find_track_objs, map_track, sanitize_track_id
 
 SEARCH_PAGE_LIMIT = 25
-POPULAR_SECTION_URL = "https://open.spotify.com/section/0JQ5DAnM3wGh0gz1MXnu3B"
-
-
-def _album_item(data):
-    if not isinstance(data, dict):
-        return None
-    album_id = data.get("id")
-    if not album_id:
-        return None
-    artists = data.get("artists") or []
-    artist = ", ".join(item.get("name", "") for item in artists if item.get("name"))
-    images = data.get("images") or []
-    return {
-        "id": album_id,
-        "title": data.get("name") or "Album",
-        "artist": artist,
-        "thumbnail": (images[0].get("url") if images else None),
-        "link": f"https://open.spotify.com/album/{album_id}",
-        "type": "album",
-    }
-
-
-def _playlist_item(data):
-    if not isinstance(data, dict) or not data.get("id"):
-        return None
-    images = data.get("images") or []
-    owner = data.get("owner") or {}
-    return {
-        "id": data["id"],
-        "title": data.get("name") or "Playlist",
-        "artist": owner.get("display_name") or owner.get("id") or "Spotify",
-        "thumbnail": (images[0].get("url") if images else None),
-        "link": data.get("external_urls", {}).get("spotify") or
-        f"https://open.spotify.com/playlist/{data['id']}",
-        "type": "playlist",
-    }
-
-
-def _track_item(data):
-    return map_track(data) if isinstance(data, dict) and data.get("id") else None
-
-
-async def _scrape_home_page(app, url, sp_dc, selector, item_type):
-    browser = app.state.browser
-    if not browser:
-        return []
-    page = context = None
-    try:
-        async with config.PLAYWRIGHT_SEMAPHORE:
-            page, context = await spotify.new_page_with_cookies(browser, sp_dc)
-            await page.goto(url, wait_until="domcontentloaded", timeout=30000)
-            try:
-                await page.wait_for_selector(selector, timeout=12000)
-            except Exception:
-                pass
-            return await page.evaluate(
-                """
-                ({selector, itemType}) => Array.from(document.querySelectorAll(selector))
-                                    .map((anchor) => {
-                                        const source = anchor.matches('a') ? anchor : anchor.querySelector('a[href*="/track/"]') || anchor;
-                                        const href = source.href || '';
-                    const match = href.match(/\\/(album|playlist|track)\\/([A-Za-z0-9]+)/);
-                    const lines = (anchor.innerText || '').split('\\n').map((x) => x.trim()).filter(Boolean);
-                    const image = anchor.querySelector('img') || source.querySelector('img');
-                    return match ? {
-                      id: match[2], type: itemType,
-                                            trackId: itemType === 'track' ? match[2] : null,
-                      title: lines[0] || anchor.getAttribute('aria-label') || itemType,
-                      artist: lines.slice(1).join(', '),
-                      thumbnail: image ? (image.currentSrc || image.src) : null,
-                      link: href
-                    } : null;
-                  }).filter(Boolean)
-                  .filter((item, index, all) => all.findIndex((other) => other.id === item.id) === index)
-                  .slice(0, 24)
-                """,
-                {"selector": selector, "itemType": item_type},
-            )
-    except Exception:
-        return []
-    finally:
-        if page:
-            try:
-                await page.close()
-            except Exception:
-                pass
-        if context:
-            try:
-                await context.close()
-            except Exception:
-                pass
-
-
-async def fetch_home(app, sp_dc: str):
-    albums, playlists, liked = await asyncio.gather(
-        _scrape_home_page(app, POPULAR_SECTION_URL, sp_dc, 'a[href*="/album/"]', "album"),
-        _scrape_home_page(app, "https://open.spotify.com/collection/playlists", sp_dc,
-                          'a[href*="/playlist/"]', "playlist"),
-        _scrape_home_page(app, "https://open.spotify.com/collection/tracks", sp_dc,
-                  'a[href*="/track/"], [data-testid="tracklist-row"], [role="row"]', "track"),
-    )
-    return {
-        "popularAlbums": albums,
-        "playlists": playlists,
-        "likedSongs": liked,
-    }
-
-
-async def fetch_collection(app, item_type: str, item_id: str, sp_dc: str):
-    if item_type not in ("album", "playlist") or not re.fullmatch(r"[A-Za-z0-9]+", item_id):
-        return []
-    scraped = await _scrape_home_page(
-        app,
-        f"https://open.spotify.com/{item_type}/{item_id}",
-        sp_dc,
-        'a[href*="/track/"], [data-testid="tracklist-row"], [role="row"]',
-        "track",
-    )
-    async def enrich(item):
-        track_id = item.get("trackId") or item.get("id")
-        if not track_id:
-            return item
-        try:
-            metadata = await get_track_metadata(app, track_id, sp_dc)
-            return metadata or item
-        except Exception:
-            return item
-    return await asyncio.gather(*(enrich(item) for item in scraped))
 
 
 def get_search_cache(query: str):
@@ -347,7 +218,6 @@ async def get_embed_html(app, track_id: str, sp_dc: str) -> HTMLResponse:
             '[data-testid="embed-widget-container"]{opacity:1 !important}'
             '[data-testid="embed-widget-skeleton"],'
             '[data-testid="skeleton"],'
-            '[data-testid="save-on-spotify"]{display:none !important}'
             '</style></head>',
             1
         )

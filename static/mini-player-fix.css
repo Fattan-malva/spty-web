@@ -23,6 +23,10 @@
   isolation: isolate !important;
 }
 
+.mini-player[hidden] {
+  display: none !important;
+}
+
 .mini-player > .mini-artwork,
 .mini-player > .mini-copy {
   display: none !important;

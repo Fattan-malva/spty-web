@@ -104,8 +104,12 @@
 
   function restore() {
     var playback = readPlayback();
-    if (!playback || !playback.trackId) {
+    // Mini player hanya muncul saat audio benar-benar sedang diputar.
+    if (!playback || !playback.trackId || playback.playing !== true) {
+      frame.src = 'about:blank';
+      frame.removeAttribute('data-track-id');
       mini.hidden = true;
+      mini.classList.remove('streaming', 'expanded');
       return;
     }
     showMini(playback, true);
@@ -175,6 +179,13 @@
 
     if (event.data.type === 'playback-state' && event.data.playback && event.data.playback.trackId) {
       writePlayback(event.data.playback);
+      if (event.data.playback.playing !== true) {
+        frame.src = 'about:blank';
+        frame.removeAttribute('data-track-id');
+        mini.hidden = true;
+        mini.classList.remove('streaming', 'expanded');
+        return;
+      }
       updateHeader(event.data.playback);
       mini.hidden = false;
       if (!mini.classList.contains('expanded')) mini.classList.add('streaming');

@@ -1,119 +1,143 @@
-import asyncio
-import json
+import hashlib
+import hmac
+import re
+import struct
 from typing import Optional
-from urllib.parse import parse_qs, urlparse
 
 import httpx
 from fastapi import FastAPI, HTTPException
-from playwright.async_api import async_playwright
 
 from . import config, locks, mappers
 from .config import cred_key, log, now
 from .mappers import sanitize_track_id
 
-TOKEN_POLL_SECONDS = 60
-TOKEN_POLL_INTERVAL = 0.25
+TOKEN_REFRESH_MARGIN = 30
+CLIENT_TOKEN_REFRESH_MARGIN = 60
+
+PLAYER_BUNDLE_JS_RE = re.compile(r'["\'](https://[^"\'\s]+/web-player\.[0-9a-f]+\.js)["\']')
+SECRETS_RE = re.compile(
+    r'\{\s*secret\s*:\s*(["\'])(.*?)\1\s*,\s*version\s*:\s*(\d+)\s*\}'
+)
+PERSISTED_HASH_RE = re.compile(
+    r'\.l\("([A-Za-z0-9_]+)","(?:query|mutation)","([a-f0-9]{64})"'
+)
 
 
-async def new_page_with_cookies(browser, sp_dc: Optional[str] = None):
-    ctx = await browser.new_context(user_agent=config.UA, locale="en-US")
-    if sp_dc and len(sp_dc) > 20:
+def _totp_key(secret: str) -> bytes:
+    values = [ord(ch) ^ ((i % 33) + 9) for i, ch in enumerate(secret)]
+    return "".join(str(v) for v in values).encode("utf-8")
+
+
+def _totp_code(key: bytes, timestamp_seconds: int) -> str:
+    counter = timestamp_seconds // 30
+    digest = hmac.new(key, struct.pack(">Q", counter), hashlib.sha1).digest()
+    offset = digest[-1] & 0x0F
+    code = ((digest[offset] & 0x7F) << 24
+            | digest[offset + 1] << 16
+            | digest[offset + 2] << 8
+            | digest[offset + 3]) % 1_000_000
+    return f"{code:06d}"
+
+
+def _extract_secrets(bundle: str) -> list[tuple[int, str]]:
+    found = [(int(m.group(3)), m.group(2)) for m in SECRETS_RE.finditer(bundle)]
+    return sorted(found, key=lambda item: item[0], reverse=True)
+
+
+def _extract_hashes(bundle: str) -> dict[str, str]:
+    return {m.group(1): m.group(2) for m in PERSISTED_HASH_RE.finditer(bundle)}
+
+
+async def _get_player_bundle(app: FastAPI) -> str:
+    resp = await app.state.http.get(config.SPOTIFY_WEB_PLAYER_URL)
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502,
+                            detail=f"Spotify web player fetch {resp.status_code}")
+    match = PLAYER_BUNDLE_JS_RE.search(resp.text)
+    if not match:
+        raise HTTPException(status_code=502,
+                            detail="Web player bundle URL not found")
+    bundle = await app.state.http.get(match.group(1))
+    if bundle.status_code != 200:
+        raise HTTPException(status_code=502,
+                            detail=f"Web player bundle fetch {bundle.status_code}")
+    return bundle.text
+
+
+async def _issue_access_token(app: FastAPI, sp_dc: str,
+                              secrets: list[tuple[int, str]]) -> tuple[str, float]:
+    try:
+        st = await app.state.http.get(config.SPOTIFY_SERVER_TIME_URL)
+    except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout,
+            httpx.WriteTimeout, httpx.PoolTimeout) as exc:
+        raise HTTPException(status_code=504,
+                            detail=f"Spotify server-time timeout: {type(exc).__name__}")
+    if st.status_code != 200:
+        raise HTTPException(status_code=502,
+                            detail=f"Spotify server-time {st.status_code}")
+    try:
+        server_time = int(st.json()["serverTime"])
+    except (KeyError, ValueError):
+        raise HTTPException(status_code=502, detail="Spotify server-time invalid payload")
+
+    last_status = None
+    for version, secret in secrets:
+        key = _totp_key(secret)
+        code = _totp_code(key, server_time)
+        params = {
+            "reason": "init",
+            "productType": config.SPOTIFY_PRODUCT_TYPE,
+            "totp": code,
+            "totpVer": str(version),
+            "totpServer": code,
+        }
         try:
-            await ctx.add_cookies([
-                {"name": "sp_dc", "value": sp_dc, "domain": ".spotify.com",
-                 "path": "/", "httpOnly": False, "secure": True, "sameSite": "Lax"},
-                {"name": "sp_dc", "value": sp_dc, "domain": "open.spotify.com",
-                 "path": "/", "httpOnly": False, "secure": True, "sameSite": "Lax"},
-            ])
-        except Exception as exc:
-            log(f"[COOKIE] failed: {exc}")
-    page = await ctx.new_page()
-    return page, ctx
+            resp = await app.state.http.get(
+                config.SPOTIFY_TOKEN_URL, params=params,
+                cookies={"sp_dc": sp_dc} if sp_dc else None)
+        except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout,
+                httpx.WriteTimeout, httpx.PoolTimeout) as exc:
+            raise HTTPException(status_code=504,
+                                detail=f"Spotify token timeout: {type(exc).__name__}")
+        if resp.status_code == 200:
+            try:
+                data = resp.json()
+            except Exception:
+                data = {}
+            access_token = data.get("accessToken")
+            if access_token:
+                expire_ms = int(data.get("accessTokenExpirationTimestampMs") or 0)
+                expires_at = (expire_ms / 1000) if expire_ms > 0 else now() + 3600
+                return access_token, expires_at
+        last_status = resp.status_code
+
+    raise HTTPException(
+        status_code=502,
+        detail=f"Spotify access token unavailable (status {last_status})")
 
 
 async def _get_access_token_uncached(app: FastAPI, sp_dc: str):
-    browser = app.state.browser
-    if not browser:
-        raise HTTPException(status_code=503, detail="Browser not ready")
-    credential_key = cred_key(sp_dc)
-    token = None
-    expire = 0
-
-    def capture_request(req):
-        if "api-partner.spotify.com/pathfinder" not in req.url:
-            return
-        try:
-            parsed = parse_qs(urlparse(req.url).query)
-            operation_name = (parsed.get("operationName") or [None])[0]
-            ext_value = (parsed.get("extensions") or [None])[0]
-            if not operation_name or not ext_value:
-                body = json.loads(req.post_data or "")
-                if not isinstance(body, dict):
-                    return
-                operation_name = body.get("operationName")
-                extensions = body.get("extensions") or {}
-            else:
-                extensions = json.loads(ext_value)
-            if not operation_name:
-                return
-            sha = (extensions.get("persistedQuery") or {}).get("sha256Hash")
-            if sha:
-                app.state.persisted_hashes[operation_name] = sha
-        except Exception:
-            return
-
-    async def on_response(resp):
-        nonlocal token, expire
-        capture_request(resp.request)
-        if "open.spotify.com/api/token" not in resp.url:
-            return
-        try:
-            data = await resp.json()
-        except Exception:
-            return
-        access_token = data.get("accessToken")
-        if access_token:
-            token = access_token
-            expire = int(data.get("accessTokenExpirationTimestampMs", 0)) / 1000
-
-    async with config.PLAYWRIGHT_SEMAPHORE:
-        page = None
-        ctx = None
-        try:
-            page, ctx = await new_page_with_cookies(browser, sp_dc)
-            page.on("response", on_response)
-            page.on("request", capture_request)
-            await page.goto("https://open.spotify.com/search/hello",
-                            wait_until="domcontentloaded", timeout=30000)
-            for _ in range(TOKEN_POLL_SECONDS):
-                if token:
-                    break
-                await asyncio.sleep(TOKEN_POLL_INTERVAL)
-        except Exception as exc:
-            log(f"[TOKEN] goto error [{credential_key}]: {exc}")
-        finally:
-            if page:
-                try: await page.close()
-                except Exception: pass
-            if ctx:
-                try: await ctx.close()
-                except Exception: pass
-
-    if not token:
-        raise HTTPException(status_code=502,
-                            detail=f"Spotify access token unavailable for room {credential_key}")
-    return token, expire or (now() + 3600)
+    secrets = app.state.totp_secrets
+    try:
+        return await _issue_access_token(app, sp_dc, secrets)
+    except HTTPException as exc:
+        if exc.status_code != 502 or "unavailable" not in str(exc.detail):
+            raise
+        log("[TOKEN] rotation suspected, re-extracting secrets")
+        bundle = await _get_player_bundle(app)
+        app.state.totp_secrets = _extract_secrets(bundle)
+        return await _issue_access_token(app, sp_dc, app.state.totp_secrets)
 
 
 async def get_access_token(app: FastAPI, sp_dc: str) -> str:
     credential_key = cred_key(sp_dc)
     cached = app.state.token_cache.get(credential_key)
-    if cached and now() < cached[1] - 30:
+    if cached and now() < cached[1] - TOKEN_REFRESH_MARGIN:
         return cached[0]
     lock = await locks.get_token_lock(credential_key)
     async with lock:
         cached = app.state.token_cache.get(credential_key)
-        if cached and now() < cached[1] - 30:
+        if cached and now() < cached[1] - TOKEN_REFRESH_MARGIN:
             return cached[0]
         token, expires_at = await _get_access_token_uncached(app, sp_dc)
         app.state.token_cache[credential_key] = (token, expires_at)
@@ -121,117 +145,67 @@ async def get_access_token(app: FastAPI, sp_dc: str) -> str:
         return token
 
 
-async def _get_client_token_uncached(app: FastAPI, sp_dc: str):
-    browser = app.state.browser
-    if not browser:
-        raise HTTPException(status_code=503, detail="Browser not ready")
-    credential_key = cred_key(sp_dc)
-    client_token = None
-    expires_at = 0
-
-    async def on_response(resp):
-        nonlocal client_token, expires_at
-        if "clienttoken.spotify.com/v1/clienttoken" not in resp.url:
-            return
-        try:
-            data = await resp.json()
-            granted = data.get("granted_token") or {}
-            token = granted.get("token")
-            if token:
-                client_token = token
-                expires_at = now() + int(granted.get("expires_after_seconds", 3600))
-        except Exception:
-            pass
-
-    async with config.PLAYWRIGHT_SEMAPHORE:
-        page = None
-        ctx = None
-        try:
-            page, ctx = await new_page_with_cookies(browser, sp_dc)
-            page.on("response", on_response)
-            await page.goto("https://open.spotify.com/search/hello",
-                            wait_until="domcontentloaded", timeout=30000)
-            for _ in range(TOKEN_POLL_SECONDS):
-                if client_token:
-                    break
-                await asyncio.sleep(TOKEN_POLL_INTERVAL)
-        except Exception as exc:
-            log(f"[CLIENT-TOKEN] error [{credential_key}]: {exc}")
-        finally:
-            if page:
-                try: await page.close()
-                except Exception: pass
-            if ctx:
-                try: await ctx.close()
-                except Exception: pass
-
-    if not client_token:
+async def _issue_client_token(app: FastAPI, sp_dc: str) -> tuple[str, float]:
+    payload = {
+        "client_data": {
+            "client_version": config.SPOTIFY_CLIENT_VERSION,
+            "client_id": config.SPOTIFY_CLIENT_ID,
+            "js_sdk_data": {},
+        }
+    }
+    try:
+        resp = await app.state.http.post(
+            config.SPOTIFY_CLIENT_TOKEN_URL, json=payload,
+            cookies={"sp_dc": sp_dc} if sp_dc else None)
+    except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout,
+            httpx.WriteTimeout, httpx.PoolTimeout) as exc:
+        raise HTTPException(status_code=504,
+                            detail=f"Spotify client token timeout: {type(exc).__name__}")
+    if resp.status_code != 200:
         raise HTTPException(status_code=502,
-                            detail=f"Spotify client token unavailable for room {credential_key}")
-    return client_token, expires_at or (now() + 3600)
+                            detail=f"Spotify client token {resp.status_code}")
+    try:
+        data = resp.json()
+    except Exception:
+        raise HTTPException(status_code=502, detail="Spotify client token invalid payload")
+    granted = data.get("granted_token") or {}
+    token = granted.get("token")
+    if not token:
+        raise HTTPException(status_code=502, detail="Spotify client token unavailable")
+    return token, now() + int(granted.get("expires_after_seconds", 3600))
+
+
+async def _get_client_token_uncached(app: FastAPI, sp_dc: str):
+    return await _issue_client_token(app, sp_dc)
 
 
 async def get_client_token(app: FastAPI, sp_dc: str) -> str:
     credential_key = cred_key(sp_dc)
     cached = app.state.client_token_cache.get(credential_key)
-    if cached and now() < cached[1] - 60:
+    if cached and now() < cached[1] - CLIENT_TOKEN_REFRESH_MARGIN:
         return cached[0]
     lock = await locks.get_client_token_lock(credential_key)
     async with lock:
         cached = app.state.client_token_cache.get(credential_key)
-        if cached and now() < cached[1] - 60:
+        if cached and now() < cached[1] - CLIENT_TOKEN_REFRESH_MARGIN:
             return cached[0]
         token, expires_at = await _get_client_token_uncached(app, sp_dc)
         app.state.client_token_cache[credential_key] = (token, expires_at)
         return token
 
 
-async def discover_persisted_hash(app: FastAPI, operation_name: str, sp_dc: Optional[str] = None):
+async def discover_persisted_hash(app: FastAPI, operation_name: str,
+                                  sp_dc: Optional[str] = None):
     existing = app.state.persisted_hashes.get(operation_name)
     if existing:
         return existing
-    browser = app.state.browser
-    if not browser:
-        raise HTTPException(status_code=503, detail="Browser not ready")
-    discovered = None
-
-    def capture_request(req):
-        nonlocal discovered
-        if discovered or "api-partner.spotify.com/pathfinder" not in req.url:
-            return
-        try:
-            body = json.loads(req.post_data or "")
-        except Exception:
-            return
-        if body.get("operationName") != operation_name:
-            return
-        discovered = ((body.get("extensions") or {}).get("persistedQuery") or {}).get("sha256Hash")
-
-    async with config.PLAYWRIGHT_SEMAPHORE:
-        page = None
-        ctx = None
-        try:
-            page, ctx = await new_page_with_cookies(browser, sp_dc)
-            page.on("request", capture_request)
-            await page.goto("https://open.spotify.com/search/hello",
-                            wait_until="domcontentloaded", timeout=30000)
-            for _ in range(TOKEN_POLL_SECONDS):
-                if discovered:
-                    break
-                await asyncio.sleep(TOKEN_POLL_INTERVAL)
-        except Exception:
-            pass
-        finally:
-            if page:
-                try: await page.close()
-                except Exception: pass
-            if ctx:
-                try: await ctx.close()
-                except Exception: pass
-
+    bundle = await _get_player_bundle(app)
+    found = _extract_hashes(bundle)
+    app.state.persisted_hashes.update(found)
+    discovered = found.get(operation_name)
     if not discovered:
-        raise HTTPException(status_code=502, detail=f"Hash for {operation_name} not found")
-    app.state.persisted_hashes[operation_name] = discovered
+        raise HTTPException(status_code=502,
+                            detail=f"Hash for {operation_name} not found")
     return discovered
 
 

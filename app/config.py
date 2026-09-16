@@ -16,6 +16,28 @@ SPCLIENT_LYRICS_URL = (
     "https://spclient.wg.spotify.com/color-lyrics/v2/track/{track_id}"
     "?format=json&vocalRemoval=false&market=from_token"
 )
+SPOTIFY_TOKEN_URL = "https://open.spotify.com/api/token"
+SPOTIFY_SERVER_TIME_URL = "https://open.spotify.com/api/server-time"
+SPOTIFY_CLIENT_TOKEN_URL = "https://clienttoken.spotify.com/v1/clienttoken"
+SPOTIFY_WEB_PLAYER_URL = "https://open.spotify.com/"
+SPOTIFY_CLIENT_ID = "d8a5ed958d274c2e8ee717e6a4b0971d"
+SPOTIFY_CLIENT_VERSION = "1.2.49.460"
+SPOTIFY_PRODUCT_TYPE = "web-player"
+
+# Known persisted-query hashes. At runtime the web player bundle is also
+# scanned (regex) so a freshly-rotated hash is discovered automatically.
+PERSISTED_HASHES = {
+    "getTrack": "a8ef9e9f02b836feb0da3003c31dbb30decc6f4b473ef89ca88c882386d668de",
+    "searchDesktop": "d9f785900f0710b31c07818d617f4f7600c1e21217e80f5b043d1e78d74e6026",
+}
+
+# TOTP secrets used to mint web player access tokens, newest first.
+# If an issue fails, they are re-extracted from the live bundle at runtime.
+TOTP_SECRETS = [
+    (61, ',7/*F("rLJ2oxaKL^f+E1xvP@N'),
+    (60, 'OmE{ZA.J^":0FG\\Uz?[@WW'),
+    (59, "{iOFn;4}<1PFYKPV?5{%u14]M>/V0hDH"),
+]
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36")
 SPOTIFY_HEADERS = {
@@ -27,7 +49,6 @@ SPOTIFY_HEADERS = {
     "user-agent": UA,
 }
 
-PLAYWRIGHT_CONCURRENCY = int(os.getenv("PLAYWRIGHT_CONCURRENCY", "4"))
 SPOTIFY_HTTP_CONCURRENCY = int(os.getenv("SPOTIFY_HTTP_CONCURRENCY", "20"))
 EMBED_CONCURRENCY = int(os.getenv("EMBED_CONCURRENCY", "12"))
 
@@ -52,7 +73,6 @@ TRACK_META_CACHE: OrderedDict[str, dict] = OrderedDict()
 EMBED_CACHE: OrderedDict[str, dict] = OrderedDict()
 LYRICS_CACHE: OrderedDict[str, dict] = OrderedDict()
 
-PLAYWRIGHT_SEMAPHORE: Optional[asyncio.Semaphore] = None
 SPOTIFY_HTTP_SEMAPHORE: Optional[asyncio.Semaphore] = None
 EMBED_SEMAPHORE: Optional[asyncio.Semaphore] = None
 

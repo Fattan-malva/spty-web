@@ -1,6 +1,6 @@
 # Spotify Web Player
 
-Aplikasi web lokal untuk mencari lagu Spotify, memutar embed track, menampilkan lirik tersinkronisasi, dan mengelola antrean lagu. Backend menggunakan FastAPI dan Playwright; frontend menggunakan HTML, CSS, dan JavaScript vanilla.
+Aplikasi web lokal untuk mencari lagu Spotify, memutar embed track, menampilkan lirik tersinkronisasi, dan mengelola antrean lagu. Backend menggunakan FastAPI; frontend menggunakan HTML, CSS, dan JavaScript vanilla.
 
 > **Catatan penting:** aplikasi ini memerlukan nilai cookie `sp_dc` Spotify. Nilai tersebut adalah kredensial sensitif. Jangan commit `sp_dc`, `.env`, atau `settings.json` ke repository dan jangan membagikannya.
 
@@ -20,7 +20,6 @@ Aplikasi web lokal untuk mencari lagu Spotify, memutar embed track, menampilkan 
 - Python 3.10 atau lebih baru.
 - Koneksi internet.
 - Akun Spotify yang memiliki cookie `sp_dc` aktif.
-- Chromium Playwright, dipasang melalui perintah instalasi di bawah.
 
 ## Instalasi
 
@@ -31,7 +30,6 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 pip install -r requirements.txt
-python -m playwright install chromium
 ```
 
 ### Linux atau macOS
@@ -41,7 +39,6 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 pip install -r requirements.txt
-python -m playwright install chromium
 ```
 
 ## Konfigurasi
@@ -52,7 +49,6 @@ Untuk request API, `sp_dc` juga dapat dikirim melalui query parameter `sp_dc`, c
 
 | Variable | Default | Keterangan |
 | --- | ---: | --- |
-| `PLAYWRIGHT_CONCURRENCY` | `4` | Batas operasi Playwright bersamaan |
 | `SPOTIFY_HTTP_CONCURRENCY` | `20` | Batas request HTTP Spotify bersamaan |
 | `EMBED_CONCURRENCY` | `12` | Batas pembuatan embed bersamaan |
 | `HTTP_CONNECT_TIMEOUT` | `5` | Timeout koneksi HTTP, dalam detik |
@@ -84,7 +80,7 @@ Untuk menjalankan langsung dengan Uvicorn:
 uvicorn app.application:app --host 0.0.0.0 --port 1404 --workers 1
 ```
 
-Gunakan satu worker karena browser Playwright dan cache aplikasi dikelola dalam lifecycle proses.
+Gunakan satu worker karena cache aplikasi dikelola dalam lifecycle proses.
 
 ## Endpoint utama
 
@@ -108,11 +104,11 @@ Endpoint track, lyrics, dan embed menerima query `sp_dc` opsional untuk mode kre
 ```text
 .
 ├── app/
-│   ├── application.py  # Factory FastAPI dan lifecycle Playwright
+│   ├── application.py  # Factory FastAPI dan lifecycle
 │   ├── config.py       # Konfigurasi, timeout, dan cache
 │   ├── routes.py       # HTTP routes
 │   ├── services.py     # Orkestrasi pencarian, metadata, lirik, dan embed
-│   ├── spotify.py      # Integrasi request Spotify dan Playwright
+│   ├── spotify.py      # Integrasi request Spotify dan TOTP token
 │   └── settings.py     # Penyimpanan settings lokal
 ├── static/
 │   ├── app.css

@@ -17,11 +17,6 @@ ENV/
 !.env.example
 settings.json
 
-# Playwright and test artifacts
-test-results/
-playwright-report/
-blob-report/
-
 # Local caches and generated files
 .pytest_cache/
 .mypy_cache/
