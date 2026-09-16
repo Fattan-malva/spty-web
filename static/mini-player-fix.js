@@ -14,6 +14,8 @@
 
   if (!mini || !frame || !lyrics || !close) return;
 
+  var falseStreak = 0;
+
   function readPlayback() {
     try {
       var value = JSON.parse(localStorage.getItem('spotifyPlayback') || 'null');
@@ -61,7 +63,8 @@
       artist: source.dataset.artist || '',
       thumbnail: source.dataset.thumbnail || '',
       positionMs: 0,
-      playing: true
+      playing: true,
+      lastActiveAt: Date.now()
     };
     writePlayback(playback);
     frame.dataset.trackId = playback.trackId;
@@ -104,8 +107,16 @@
 
   function restore() {
     var playback = readPlayback();
-    // Mini player hanya muncul saat audio benar-benar sedang diputar.
+    // Mini player hanya muncul saat ada sesi pemutaran yang baru saja aktif.
     if (!playback || !playback.trackId || playback.playing !== true) {
+      frame.src = 'about:blank';
+      frame.removeAttribute('data-track-id');
+      mini.hidden = true;
+      mini.classList.remove('streaming', 'expanded');
+      return;
+    }
+    var age = Date.now() - (playback.lastActiveAt || 0);
+    if (age > 120000) {
       frame.src = 'about:blank';
       frame.removeAttribute('data-track-id');
       mini.hidden = true;
@@ -178,17 +189,28 @@
     if (event.origin !== location.origin || !event.data) return;
 
     if (event.data.type === 'playback-state' && event.data.playback && event.data.playback.trackId) {
-      writePlayback(event.data.playback);
-      if (event.data.playback.playing !== true) {
-        frame.src = 'about:blank';
-        frame.removeAttribute('data-track-id');
-        mini.hidden = true;
-        mini.classList.remove('streaming', 'expanded');
+      var playback = event.data.playback;
+      playback.lastActiveAt = Date.now();
+      writePlayback(playback);
+
+      if (playback.playing === true) {
+        // Sedang diputar: tampilkan dan pertahankan tanpa jeda.
+        falseStreak = 0;
+        updateHeader(playback);
+        mini.hidden = false;
+        if (!mini.classList.contains('expanded')) mini.classList.add('streaming');
         return;
       }
-      updateHeader(event.data.playback);
-      mini.hidden = false;
-      if (!mini.classList.contains('expanded')) mini.classList.add('streaming');
+
+      // Flag playing bisa sempat false saat embed baru dimuat / buffer.
+      // Tunggu beberapa detik berturut-turut non-playing sebelum menyembunyikan
+      // mini player. Frame tidak pernah di-blank di sini agar pemutaran jalan.
+      falseStreak++;
+      if (falseStreak >= 12) {
+        falseStreak = 0;
+        mini.hidden = true;
+        mini.classList.remove('streaming');
+      }
       return;
     }
 

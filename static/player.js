@@ -13,6 +13,7 @@
     autoplayPending: false,
     autoplayDone: false,
     endedBound: false,
+    embedMsg: false,
     isPlaying: false,
     queueAdvancePending: false,
     embedded: params.get('embedded') === '1',
@@ -112,6 +113,7 @@
     state.autoplayPending = false;
     state.autoplayDone = false;
     state.endedBound = false;
+    state.embedMsg = false;
     state.queueAdvancePending = false;
     state.expanded = false;
 
@@ -183,6 +185,7 @@
       current.trackId = state.trackId;
       current.positionMs = Math.max(0, Math.round(state.playhead || current.positionMs || 0));
       current.playing = state.isPlaying;
+      current.lastActiveAt = Date.now();
       if (metadata) {
         current.title = metadata.title || '';
         current.artist = metadata.artist || '';
@@ -248,11 +251,13 @@
   }
 
   function goBack() {
-    samplePlayhead();
-    var doc = getEmbedDoc();
-    var media = doc && doc.querySelector('audio, video');
-    var isPlaying = !!(media && !media.paused) || state.isPlaying;
-    state.isPlaying = isPlaying;
+    if (!state.embedMsg) {
+      samplePlayhead();
+      var doc = getEmbedDoc();
+      var media = doc && doc.querySelector('audio, video');
+      var isPlaying = !!(media && !media.paused) || state.isPlaying;
+      state.isPlaying = isPlaying;
+    }
     rememberPlayback();
 
     if (state.mini) {
@@ -452,8 +457,26 @@
     var position = payload.position;
     if (typeof position !== 'number') position = payload.positionMs;
     if (typeof position !== 'number') position = d.ms;
-    if (d.type === 'playback_started') state.isPlaying = true;
-    if ((d.type === 'playhead' || d.type === 'playback_update' || d.type === 'playback_started') && typeof position === 'number') {
+
+    // Status pemutaran asli datang dari embed Spotify lewat message
+    // (mis. {type:'playback_update', payload:{isPaused, position, ...}}).
+    // Halaman embed tidak punya elemen audio/video yang terbaca oleh
+    // querySelector, jadi status ini dipakai sebagai sumber kebenaran.
+    var embedType = d.type === 'ready' || d.type === 'playback_update' ||
+      d.type === 'playback_started' || d.type === 'playback_paused' ||
+      d.type === 'playback_resumed' || d.type === 'playhead';
+    if (embedType) state.embedMsg = true;
+    if (d.type === 'playback_started' || d.type === 'playback_resumed') state.isPlaying = true;
+    if (d.type === 'playback_paused') state.isPlaying = false;
+    if (d.type === 'playback_update' || d.type === 'playback_resumed' || d.type === 'playback_paused') {
+      if (typeof payload.isPaused === 'boolean') {
+        state.isPlaying = !payload.isPaused;
+      }
+    }
+
+    var posMsg = (d.type === 'playhead' || d.type === 'playback_update' ||
+      d.type === 'playback_started') && typeof position === 'number';
+    if (posMsg) {
       state.playhead = position;
       state.useMsg = true;
       state.lastMessageAt = Date.now();
@@ -475,7 +498,11 @@
           });
         }
       }
-      state.isPlaying = samplePlayhead();
+      // Status dari embed (embedMsg) sudah akurat lewat message; jangan
+      // ditimpa hasil sampling DOM yang tidak menemukan elemen media apa pun.
+      if (!state.embedMsg) {
+        state.isPlaying = samplePlayhead();
+      }
       rememberPlayback();
       if (state.lyrics && !document.documentElement.classList.contains('mini-embed')) {
         updateActiveLine(state.playhead);

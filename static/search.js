@@ -432,8 +432,10 @@
     el.miniPlayer.hidden = true;
     el.miniPlayer.classList.remove('streaming');
     try { saved = JSON.parse(localStorage.getItem('spotifyPlayback') || 'null'); } catch (e) { saved = null; }
-    // Mini player hanya muncul saat audio benar-benar sedang diputar.
+    // Mini player hanya muncul saat ada sesi pemutaran yang baru saja aktif.
     if (!saved || !saved.trackId || saved.playing !== true) return;
+    var age = Date.now() - (saved.lastActiveAt || 0);
+    if (age > 120000) return;
     el.miniTitle.textContent = saved.title || 'Sedang diputar';
     el.miniArtist.textContent = saved.artist || '';
     if (el.miniArtwork) {
@@ -451,7 +453,6 @@
     localStorage.setItem('spotifyPlayback', JSON.stringify(playback));
     if (!el.playerFrame.classList.contains('is-background')) return;
     if (playback.playing !== true) {
-      el.miniFrame.src = 'about:blank';
       el.miniPlayer.classList.remove('streaming');
       el.miniPlayer.hidden = true;
       return;
@@ -480,6 +481,8 @@
     el.miniFrame.src = 'about:blank';
     try { saved = JSON.parse(localStorage.getItem('spotifyPlayback') || 'null'); } catch (e) { saved = null; }
     if (!saved || !saved.trackId || !state.spDc || saved.playing !== true) return;
+    var restoreAge = Date.now() - (saved.lastActiveAt || 0);
+    if (restoreAge > 120000) return;
     el.miniTitle.textContent = saved.title || 'Sedang diputar';
     el.miniArtist.textContent = saved.artist || '';
     if (el.miniArtwork) {
