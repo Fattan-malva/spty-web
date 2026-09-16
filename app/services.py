@@ -6,7 +6,7 @@ from fastapi.responses import HTMLResponse
 
 from . import config, locks, spotify
 from .config import MAX_EMBED_CACHE, MAX_LYRICS_CACHE, MAX_TRACK_CACHE, cache_put, now
-from .mappers import extract_search, find_track_objs, map_track, sanitize_track_id
+from .mappers import extract_search, find_track_objs, format_duration, map_track, sanitize_track_id
 
 SEARCH_PAGE_LIMIT = 25
 
@@ -185,6 +185,75 @@ async def get_lyrics(app, track_id: str, sp_dc: str) -> dict:
               {"data": payload, "expiresAt": now() + config.LYRICS_CACHE_TTL},
               MAX_LYRICS_CACHE)
     return payload
+
+
+async def get_user_playlists(app, sp_dc: str) -> dict:
+    data = await spotify.spotify_web_api_get(app, "/v1/me/playlists", sp_dc, params={"limit": "50"})
+    items = data.get("items", [])
+    return {
+        "items": [
+            {
+                "id": pl.get("id"),
+                "name": pl.get("name"),
+                "description": (pl.get("description") or "")[:120],
+                "images": pl.get("images", []),
+                "trackCount": (pl.get("tracks") or {}).get("total", 0),
+                "owner": ((pl.get("owner") or {}).get("display_name")) or "",
+            }
+            for pl in items
+        ]
+    }
+
+
+async def get_user_liked_tracks(app, sp_dc: str) -> dict:
+    data = await spotify.spotify_web_api_get(
+        app, "/v1/me/tracks", sp_dc, params={"limit": "50"}
+    )
+    items = data.get("items", [])
+    tracks = []
+    for item in items:
+        track = item.get("track")
+        if not track:
+            continue
+        artists = [a.get("name", "") for a in (track.get("artists") or [])]
+        album = track.get("album") or {}
+        images = album.get("images") or []
+        tracks.append({
+            "trackId": track.get("id"),
+            "title": track.get("name"),
+            "artist": ", ".join(artists),
+            "thumbnail": images[0].get("url") if images else None,
+            "duration": format_duration(track.get("duration_ms")),
+            "durationMs": track.get("duration_ms") or 0,
+            "explicit": track.get("explicit", False),
+        })
+    return {"total": data.get("total", len(tracks)), "items": tracks}
+
+
+async def get_playlist_tracks(app, playlist_id: str, sp_dc: str) -> dict:
+    data = await spotify.spotify_web_api_get(
+        app, f"/v1/playlists/{playlist_id}/tracks", sp_dc,
+        params={"limit": "50"}
+    )
+    items = data.get("items", [])
+    tracks = []
+    for item in items:
+        track = item.get("track")
+        if not track:
+            continue
+        artists = [a.get("name", "") for a in (track.get("artists") or [])]
+        album = track.get("album") or {}
+        images = album.get("images") or []
+        tracks.append({
+            "trackId": track.get("id"),
+            "title": track.get("name"),
+            "artist": ", ".join(artists),
+            "thumbnail": images[0].get("url") if images else None,
+            "duration": format_duration(track.get("duration_ms")),
+            "durationMs": track.get("duration_ms") or 0,
+            "explicit": track.get("explicit", False),
+        })
+    return {"total": data.get("total", len(tracks)), "items": tracks}
 
 
 async def get_embed_html(app, track_id: str, sp_dc: str) -> HTMLResponse:

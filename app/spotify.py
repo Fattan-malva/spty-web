@@ -269,6 +269,31 @@ async def spotify_query(app: FastAPI, operation_name: str, variables: dict,
     return response.json()
 
 
+async def spotify_web_api_get(app: FastAPI, path: str, sp_dc: str, params: dict = None):
+    token = await get_access_token(app, sp_dc)
+    url = f"https://api.spotify.com{path}"
+    headers = {
+        "authorization": f"Bearer {token}",
+        "accept": "application/json",
+        "user-agent": config.UA,
+    }
+    try:
+        resp = await app.state.http.get(url, params=params, headers=headers, timeout=10.0)
+    except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout,
+            httpx.WriteTimeout, httpx.PoolTimeout) as exc:
+        raise HTTPException(status_code=504,
+                            detail=f"Spotify Web API timeout: {type(exc).__name__}")
+    if resp.status_code == 401:
+        app.state.token_cache.pop(cred_key(sp_dc), None)
+        token = await get_access_token(app, sp_dc)
+        headers["authorization"] = f"Bearer {token}"
+        resp = await app.state.http.get(url, params=params, headers=headers, timeout=10.0)
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502,
+                            detail=f"Spotify Web API {resp.status_code}: {resp.text[:200]}")
+    return resp.json()
+
+
 async def fetch_spotify_lyrics(app: FastAPI, track_id: str, sp_dc: str) -> dict | None:
     """Fetch synced lyrics via spclient color-lyrics API. Returns None if unavailable."""
     tid = sanitize_track_id(track_id)

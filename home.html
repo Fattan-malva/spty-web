@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spotify</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+  <link rel="stylesheet" href="/static/home.css">
+  <link rel="stylesheet" href="/static/mini-player-fix.css">
+</head>
+
+<body class="text-sm">
+
+  <div class="app-grid">
+
+    <!-- ===================== HEADER ===================== -->
+    <header class="col-span-full flex items-center justify-between px-2 z-20">
+      <div class="flex items-center gap-6">
+        <i class="fab fa-spotify text-3xl text-white ml-2"></i>
+        <button id="homeBtn" title="Beranda" aria-label="Beranda"
+          class="w-12 h-12 rounded-full bg-spotify-elevated flex items-center justify-center hover:scale-105 transition-transform cursor-pointer">
+          <i class="fas fa-home text-xl text-white"></i>
+        </button>
+      </div>
+
+      <div class="flex items-center gap-2 max-w-[500px] w-full mx-4">
+        <div class="searchbar relative flex-1 group">
+          <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+            <i class="fas fa-search text-spotify-light group-focus-within:text-white transition-colors text-lg"></i>
+          </div>
+          <input type="text" id="searchInput" placeholder="Cari lagu, artis, album..."
+            autocomplete="off" spellcheck="false"
+            class="w-full bg-spotify-elevated text-white rounded-full py-3.5 pl-12 pr-12 focus:outline-none focus:ring-2 focus:ring-white focus:bg-spotify-highlight transition-all placeholder-spotify-light border-transparent hover:bg-spotify-hover text-base">
+          <div class="absolute inset-y-0 right-0 pr-3 flex items-center gap-2">
+            <button id="btnSearch" title="Cari" aria-label="Cari"
+              class="w-8 h-8 flex items-center justify-center text-spotify-light hover:text-white transition-colors">
+              <i class="fas fa-arrow-right text-lg"></i>
+            </button>
+          </div>
+          <div class="suggestions" id="suggestions" hidden></div>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <button id="settingsBtn" title="Pengaturan" aria-label="Pengaturan"
+          class="text-spotify-light hover:text-white hover:scale-105 transition-all w-8 h-8 rounded-full flex items-center justify-center">
+          <i class="fas fa-cog text-lg"></i>
+        </button>
+        <div class="w-8 h-8 rounded-full bg-green-500 text-black font-bold flex items-center justify-center ml-1 text-sm select-none">S</div>
+      </div>
+    </header>
+
+    <!-- ===================== LEFT SIDEBAR (LIBRARY) ===================== -->
+    <aside class="left-sidebar bg-spotify-base rounded-lg flex flex-col overflow-hidden">
+      <div class="px-4 py-3 flex items-center justify-between z-10 sticky top-0 bg-spotify-base">
+        <button class="flex items-center gap-4 text-spotify-light hover:text-white transition-colors font-bold text-base">
+          <i class="fas fa-book-open text-xl"></i>
+          Your Library
+        </button>
+        <div class="flex gap-1 text-spotify-light">
+          <button id="libraryReload" title="Muat ulang" aria-label="Muat ulang"
+            class="hover:text-white hover:bg-spotify-hover w-8 h-8 rounded-full flex items-center justify-center transition-all">
+            <i class="fas fa-rotate-right text-sm"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="library-scroll flex-1 overflow-y-auto px-2 pb-4">
+        <div class="flex flex-col gap-1" id="libraryList"></div>
+
+        <div id="libraryEmpty" class="bg-spotify-elevated rounded-lg p-4 mt-3 " hidden>
+          <h3 class="font-bold mb-2 text-[15px]">Atur sp_dc untuk memuat perpustakaan</h3>
+          <p class="text-sm text-spotify-light mb-4 font-medium">Playlist & lagu disukai akan muncul di sini.</p>
+          <button id="libraryOpenSettings" class="bg-white text-black font-bold px-4 py-1.5 rounded-full text-sm hover:scale-105 transition-transform">
+            Atur sp_dc
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ===================== MAIN CONTENT ===================== -->
+    <main class="main-content bg-spotify-base rounded-lg overflow-y-auto relative">
+
+      <!-- HOME VIEW -->
+      <div id="viewHome" class="view active p-6 pb-20">
+        <div class="spdc-banner" id="spdcBanner">
+          <span>sp_dc belum diatur - lagu tidak bisa diputar.</span>
+          <button class="banner-btn" id="bannerOpenSettings">Atur Sekarang</button>
+        </div>
+
+        <div class="mb-6 mt-2">
+          <h2 class="text-2xl font-bold text-white tracking-tight">Selamat datang</h2>
+          <p class="text-spotify-light mt-1" id="homeSubtitle">Perpustakaan kamu</p>
+        </div>
+
+        <div id="playlistGrid" class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3"></div>
+      </div>
+
+      <!-- SEARCH VIEW -->
+      <div id="viewSearch" class="view p-6 pb-20">
+        <div class="mb-6 mt-2 flex items-center justify-between">
+          <h2 class="text-2xl font-bold text-white tracking-tight" id="searchTitle">Hasil pencarian</h2>
+        </div>
+
+        <div id="searchSkeleton" class="flex flex-col gap-2" hidden>
+          <div class="skeleton-block h-32 rounded-lg mb-4"></div>
+          <div class="skeleton-block h-12"></div>
+          <div class="skeleton-block h-12"></div>
+          <div class="skeleton-block h-12"></div>
+        </div>
+
+        <div id="searchHint" class="text-spotify-light py-12 text-center" hidden></div>
+
+        <div id="searchTopResult"></div>
+
+        <h3 class="text-xl font-bold mb-4 mt-8">Lagu</h3>
+        <div class="flex flex-col gap-1" id="searchSongList"></div>
+        <div id="searchSentinel" class="h-px"></div>
+      </div>
+
+      <!-- PLAYLIST VIEW -->
+      <div id="viewPlaylist" class="view p-6 pb-20">
+        <div class="flex flex-col md:flex-row md:items-end gap-5 mb-8">
+          <div id="plCover"
+            class="w-40 h-40 md:w-52 md:h-52 rounded-lg shadow-2xl overflow-hidden bg-[#282828] flex items-center justify-center text-white/50 flex-shrink-0">
+            <i class="fas fa-music text-4xl"></i>
+          </div>
+          <div class="min-w-0 flex-1">
+            <p class="uppercase text-xs font-bold text-spotify-light mb-2" id="plType">Playlist</p>
+            <h1 id="plTitle" class="text-3xl md:text-5xl font-extrabold text-white leading-tight mb-3"></h1>
+            <p id="plDesc" class="text-spotify-light line-clamp-2"></p>
+            <p id="plMeta" class="text-spotify-light text-sm mt-2"></p>
+            <div class="flex items-center gap-3 mt-6">
+              <button id="plPlayAll"
+                class="w-12 h-12 rounded-full bg-[#1ed760] hover:bg-[#3be477] hover:scale-105 flex items-center justify-center shadow-xl transition-all">
+                <i class="fas fa-play text-black text-lg ml-1"></i>
+              </button>
+              <button id="plEnqueueAll"
+                class="flex items-center gap-2 text-spotify-light hover:text-white hover:scale-105 font-semibold transition-all">
+                <i class="fas fa-plus text-lg"></i>
+                <span>Antrekan semua</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-1" id="plTracks"></div>
+      </div>
+
+    </main>
+
+    <!-- ===================== RIGHT SIDEBAR (NOW PLAYING / QUEUE) ===================== -->
+    <aside class="right-sidebar bg-spotify-base rounded-lg flex flex-col overflow-hidden relative">
+      <div class="px-4 py-3 flex items-center justify-between z-10 bg-spotify-base sticky top-0">
+        <h3 class="font-bold text-base truncate pr-4 text-white" id="nowTitle">Belum ada yang diputar</h3>
+        <div class="flex gap-2 text-spotify-subdued flex-shrink-0">
+          <button id="queueClear" title="Kosongkan antrean" aria-label="Kosongkan antrean"
+            class="hover:text-white hover:bg-spotify-hover w-8 h-8 rounded-full flex items-center justify-center transition-all">
+            <i class="fas fa-trash-can"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="flex-1 overflow-y-auto px-4 pb-28">
+        <div class="w-full rounded-lg overflow-hidden shadow-2xl mb-4 mt-2 relative aspect-square bg-[#282828] group" id="nowCoverWrap">
+          <img id="nowCover" src="" alt="Cover" class="w-full h-full object-cover" hidden>
+          <div class="absolute inset-0 flex items-center justify-center text-white/40">
+            <i class="fas fa-music text-6xl"></i>
+          </div>
+        </div>
+
+        <div class="flex justify-between items-start mb-6">
+          <div class="flex-1 min-w-0 pr-4">
+            <h2 class="text-2xl font-bold mb-1 truncate text-white" id="nowSongTitle">—</h2>
+            <p class="text-spotify-light text-base truncate" id="nowArtist">—</p>
+          </div>
+        </div>
+
+        <div class="flex justify-between items-end mb-4">
+          <h3 class="font-bold text-base text-white">Next in queue</h3>
+          <span class="text-sm text-spotify-light font-medium bg-spotify-elevated rounded-full px-2.5 py-0.5" id="queueCount">0</span>
+        </div>
+
+        <div class="flex flex-col gap-1" id="queueList"></div>
+        <p class="queue-empty text-spotify-light text-sm py-6 text-center" id="queueEmpty">Belum ada lagu di antrean.</p>
+      </div>
+    </aside>
+
+  </div>
+
+  <!-- ===================== OVERLAYS ===================== -->
+
+  <div class="spdc-popover" id="settingsPop">
+    <h3>Pengaturan</h3>
+    <label for="spdcInput">sp_dc</label>
+    <input id="spdcInput" type="text" autocomplete="off" spellcheck="false" placeholder="Tempel sp_dc cookie di sini">
+    <button class="save" id="btnSaveSpdc">Simpan</button>
+    <div class="pmsg" id="settingsMsg"></div>
+  </div>
+
+  <div id="toast"></div>
+
+  <div class="mini-player" id="miniPlayer" hidden>
+    <img id="miniArtwork" class="mini-artwork" alt="" hidden>
+    <div class="mini-copy">
+      <strong id="miniTitle">Sedang diputar</strong>
+      <span id="miniArtist"></span>
+    </div>
+    <button id="miniLyrics" title="Buka lirik" aria-label="Buka lirik">
+      <i data-lucide="file-music"></i>
+    </button>
+    <button id="miniClose" title="Tutup mini player" aria-label="Tutup mini player">
+      <i data-lucide="x"></i>
+    </button>
+    <iframe id="miniFrame" allow="autoplay *; encrypted-media; fullscreen; picture-in-picture; web-share"
+      allowfullscreen frameborder="0" loading="eager" title="Mini Spotify Player"></iframe>
+  </div>
+
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="/static/queue.js"></script>
+  <script src="/static/home.js"></script>
+  <script src="/static/playback-fixes.js"></script>
+  <script src="/static/mini-player-fix.js"></script>
+</body>
+
+</html>

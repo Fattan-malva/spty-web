@@ -32,7 +32,7 @@ async def health(request: Request):
 
 @router.get("/")
 async def root():
-    return FileResponse(os.path.join(config.BASE_DIR, "search.html"), media_type="text/html")
+    return FileResponse(os.path.join(config.BASE_DIR, "home.html"), media_type="text/html")
 
 
 @router.get("/settings")
@@ -108,6 +108,31 @@ async def search(request: Request, q: str = Query(...), page: int = Query(1, ge=
     if offset is not None:
         page = (offset // limit) + 1
     return await services.fetch_search_page(request.app, q, page, limit)
+
+
+@router.get("/playlists")
+async def playlists_ep(request: Request, sp_dc: Optional[str] = Query(None)):
+    room_sp_dc = _require(request, sp_dc)
+    if isinstance(room_sp_dc, HTMLResponse):
+        return room_sp_dc
+    return await services.get_user_playlists(request.app, room_sp_dc)
+
+
+@router.get("/liked")
+async def liked_ep(request: Request, sp_dc: Optional[str] = Query(None)):
+    room_sp_dc = _require(request, sp_dc)
+    if isinstance(room_sp_dc, HTMLResponse):
+        return room_sp_dc
+    return await services.get_user_liked_tracks(request.app, room_sp_dc)
+
+
+@router.get("/playlist/{playlist_id}/tracks")
+async def playlist_tracks_ep(request: Request, playlist_id: str,
+                             sp_dc: Optional[str] = Query(None)):
+    room_sp_dc = _require(request, sp_dc)
+    if isinstance(room_sp_dc, HTMLResponse):
+        return room_sp_dc
+    return await services.get_playlist_tracks(request.app, playlist_id, room_sp_dc)
 
 
 @router.get("/track")
