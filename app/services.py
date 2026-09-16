@@ -188,72 +188,118 @@ async def get_lyrics(app, track_id: str, sp_dc: str) -> dict:
 
 
 async def get_user_playlists(app, sp_dc: str) -> dict:
-    data = await spotify.spotify_web_api_get(app, "/v1/me/playlists", sp_dc, params={"limit": "50"})
-    items = data.get("items", [])
-    return {
-        "items": [
-            {
-                "id": pl.get("id"),
-                "name": pl.get("name"),
-                "description": (pl.get("description") or "")[:120],
-                "images": pl.get("images", []),
-                "trackCount": (pl.get("tracks") or {}).get("total", 0),
-                "owner": ((pl.get("owner") or {}).get("display_name")) or "",
-            }
-            for pl in items
-        ]
-    }
+    """Fetch user playlists via GraphQL (libraryV3)."""
+    data = await spotify.spotify_query(
+        app, "libraryV3",
+        {"limit": 50, "offset": 0},
+        sp_dc=sp_dc,
+    )
+    lib = (data.get("data") or {}).get("me", {}).get("libraryV3", {})
+    items = lib.get("items", [])
+    playlists = []
+    for entry in items:
+        item = (entry.get("item") or {})
+        pl = item.get("data") or {}
+        if not pl.get("name"):
+            continue
+        uri = item.get("_uri") or pl.get("uri") or ""
+        pl_id = uri.split(":")[-1] if ":" in uri else ""
+        if not pl_id:
+            continue
+        images = pl.get("images") or {}
+        sources = (images.get("items") or [{}])[0].get("sources") or []
+        cover = sources[0].get("url") if sources else None
+        owner = (pl.get("ownerV2") or {}).get("data") or {}
+        playlists.append({
+            "id": pl_id,
+            "name": pl.get("name", ""),
+            "description": (pl.get("description") or "")[:120],
+            "images": [{"url": cover}] if cover else [],
+            "trackCount": 0,
+            "owner": owner.get("name", ""),
+        })
+    return {"items": playlists}
 
 
 async def get_user_liked_tracks(app, sp_dc: str) -> dict:
-    data = await spotify.spotify_web_api_get(
-        app, "/v1/me/tracks", sp_dc, params={"limit": "50"}
+    """Fetch user's liked (saved) tracks via GraphQL (fetchLibraryTracks)."""
+    data = await spotify.spotify_query(
+        app, "fetchLibraryTracks",
+        {"offset": 0, "limit": 50},
+        sp_dc=sp_dc,
     )
-    items = data.get("items", [])
-    tracks = []
-    for item in items:
-        track = item.get("track")
-        if not track:
+    lib = (data.get("data") or {}).get("me", {}).get("library", {}).get("tracks", {})
+    total = lib.get("totalCount", 0)
+    items = []
+    for entry in lib.get("items", []):
+        track = (entry.get("item") or {}).get("data") or entry.get("data") or {}
+        if not track.get("name"):
             continue
-        artists = [a.get("name", "") for a in (track.get("artists") or [])]
-        album = track.get("album") or {}
-        images = album.get("images") or []
-        tracks.append({
-            "trackId": track.get("id"),
-            "title": track.get("name"),
+        track_id = track.get("id") or ""
+        if not track_id:
+            uri = track.get("uri") or ""
+            track_id = uri.split(":")[-1] if ":" in uri else ""
+        if not track_id:
+            continue
+        artists = [a.get("profile", {}).get("name", "")
+                   for a in (track.get("artists") or {}).get("items", [])
+                   if isinstance(a, dict)]
+        album = track.get("albumOfTrack") or {}
+        sources = (album.get("coverArt") or {}).get("sources") or []
+        cover = max(sources, key=lambda s: s.get("width") or 0).get("url") if sources else None
+        dur_ms = (track.get("trackDuration") or {}).get("totalMilliseconds") or 0
+        items.append({
+            "trackId": track_id,
+            "title": track.get("name", ""),
             "artist": ", ".join(artists),
-            "thumbnail": images[0].get("url") if images else None,
-            "duration": format_duration(track.get("duration_ms")),
-            "durationMs": track.get("duration_ms") or 0,
-            "explicit": track.get("explicit", False),
+            "thumbnail": cover,
+            "duration": format_duration(dur_ms),
+            "durationMs": dur_ms,
+            "explicit": (track.get("contentRating") or {}).get("label") == "EXPLICIT",
         })
-    return {"total": data.get("total", len(tracks)), "items": tracks}
+    return {"total": total, "items": items}
 
 
 async def get_playlist_tracks(app, playlist_id: str, sp_dc: str) -> dict:
-    data = await spotify.spotify_web_api_get(
-        app, f"/v1/playlists/{playlist_id}/tracks", sp_dc,
-        params={"limit": "50"}
+    """Fetch playlist tracks via GraphQL (fetchPlaylist)."""
+    uri = f"spotify:playlist:{playlist_id}"
+    data = await spotify.spotify_query(
+        app, "fetchPlaylist",
+        {"uri": uri, "offset": 0, "limit": 100,
+         "enableWatchFeedEntrypoint": False, "includeAudiobooks": False},
+        sp_dc=sp_dc,
     )
-    items = data.get("items", [])
-    tracks = []
-    for item in items:
-        track = item.get("track")
-        if not track:
+    pl = (data.get("data") or {}).get("playlistV2") or {}
+    content = pl.get("content") or {}
+    total = content.get("pagingInfo", {}).get("limit", 0)
+    items = []
+    for entry in content.get("items", []):
+        track = ((entry.get("itemV2") or {}).get("data") or {})
+        if not track.get("name"):
             continue
-        artists = [a.get("name", "") for a in (track.get("artists") or [])]
-        album = track.get("album") or {}
-        images = album.get("images") or []
-        tracks.append({
-            "trackId": track.get("id"),
-            "title": track.get("name"),
+        track_id = track.get("id") or ""
+        if not track_id:
+            uri = track.get("uri") or ""
+            track_id = uri.split(":")[-1] if ":" in uri else ""
+        if not track_id:
+            continue
+        artists = [a.get("profile", {}).get("name", "")
+                   for a in (track.get("artists") or {}).get("items", [])
+                   if isinstance(a, dict)]
+        album = track.get("albumOfTrack") or {}
+        sources = (album.get("coverArt") or {}).get("sources") or []
+        cover = max(sources, key=lambda s: s.get("width") or 0).get("url") if sources else None
+        dur_ms = (track.get("trackDuration") or {}).get("totalMilliseconds") or 0
+        items.append({
+            "trackId": track_id,
+            "title": track.get("name", ""),
             "artist": ", ".join(artists),
-            "thumbnail": images[0].get("url") if images else None,
-            "duration": format_duration(track.get("duration_ms")),
-            "durationMs": track.get("duration_ms") or 0,
-            "explicit": track.get("explicit", False),
+            "thumbnail": cover,
+            "duration": format_duration(dur_ms),
+            "durationMs": dur_ms,
+            "explicit": (track.get("contentRating") or {}).get("label") == "EXPLICIT",
         })
-    return {"total": data.get("total", len(tracks)), "items": tracks}
+    return {"total": len(items), "items": items}
 
 
 async def get_embed_html(app, track_id: str, sp_dc: str) -> HTMLResponse:

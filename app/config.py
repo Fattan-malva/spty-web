@@ -29,6 +29,9 @@ SPOTIFY_PRODUCT_TYPE = "web-player"
 PERSISTED_HASHES = {
     "getTrack": "a8ef9e9f02b836feb0da3003c31dbb30decc6f4b473ef89ca88c882386d668de",
     "searchDesktop": "d9f785900f0710b31c07818d617f4f7600c1e21217e80f5b043d1e78d74e6026",
+    "libraryV3": "390c78e5b951029bad359785e69b07b536a509c581cbcd0aded5e5067f187455",
+    "fetchPlaylist": "86dde7b9d9356e2369414647cf6950cfed96e778e129cfdfc99aea6c1613b3b0",
+    "fetchLibraryTracks": "087278b20b743578a6262c2b0b4bcd20d879c503cc359a2285baf083ef944240",
 }
 
 # TOTP secrets used to mint web player access tokens, newest first.
