@@ -17,6 +17,7 @@
     isPlaying: false,
     queueAdvancePending: false,
     autoAdvancing: false,
+    loadSeq: 0,
     embedded: params.get('embedded') === '1',
     mini: params.get('mini') === '1',
     expanded: false
@@ -105,7 +106,11 @@
       showGate();
       return;
     }
+    // Di mini player yang sedang diperluas (lyrics penuh), pertahankan mode
+    // tampilannya saat pindah lagu (auto-advance) agar lirik tidak menutup.
+    var wasExpanded = state.mini && state.expanded;
     state.trackId = trackId;
+    var loadSeq = ++state.loadSeq;
     state.trackDuration = 0;
     state.lyrics = null;
     state.activeLine = -1;
@@ -120,7 +125,7 @@
     state.expanded = false;
 
     if (state.mini) {
-      setExpandedView(false);
+      setExpandedView(wasExpanded);
     } else {
       document.documentElement.classList.remove('mini-embed');
     }
@@ -144,14 +149,17 @@
 
     api('/track?trackId=' + encodeURIComponent(trackId) + credQ())
       .then(function (full) {
+        if (loadSeq !== state.loadSeq) return;
         if (full && (full.title || full.thumbnail)) renderNow(full);
       })
       .catch(function (e) {
+        if (loadSeq !== state.loadSeq) return;
         if (e.needsSpdc) showGate();
       });
 
     api('/lyrics?trackId=' + encodeURIComponent(trackId) + credQ())
       .then(function (l) {
+        if (loadSeq !== state.loadSeq) return;
         if (l && l.lines && l.lines.length) {
           state.lyrics = l;
           if (!state.mini || state.expanded) {
@@ -163,6 +171,7 @@
         }
       })
       .catch(function (e) {
+        if (loadSeq !== state.loadSeq) return;
         if (e.needsSpdc) showGate();
         finishEmbedOnly();
       });

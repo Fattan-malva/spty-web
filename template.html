@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spotify Clone Redesign with AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #000000;
+            color: #ffffff;
+            overflow: hidden; 
+            margin: 0;
+            height: 100vh;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 12px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.3);
+            border: 3px solid #121212; /* Match background to look floating */
+            border-radius: 8px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.5);
+        }
+        .main-content::-webkit-scrollbar-thumb, .right-sidebar::-webkit-scrollbar-thumb {
+             border-color: #121212;
+        }
+
+        /* Colors */
+        .bg-spotify-base { background-color: #121212; }
+        .bg-spotify-elevated { background-color: #242424; }
+        .bg-spotify-highlight { background-color: #1a1a1a; }
+        .bg-spotify-hover { background-color: #2a2a2a; }
+        .text-spotify-light { color: #b3b3b3; }
+        .text-spotify-subdued { color: #a7a7a7; }
+        
+        /* Layout Grid */
+        .app-grid {
+            display: grid;
+            grid-template-columns: 350px minmax(400px, 1fr) 350px; 
+            grid-template-rows: 64px 1fr; 
+            height: 100vh;
+            gap: 8px;
+            padding: 8px;
+            box-sizing: border-box;
+        }
+
+        /* Responsive */
+        @media (max-width: 1200px) {
+            .app-grid {
+                grid-template-columns: 280px 1fr 280px; 
+            }
+        }
+        @media (max-width: 900px) {
+            .app-grid {
+                grid-template-columns: 280px 1fr; 
+            }
+            .right-sidebar { display: none !important; }
+        }
+        @media (max-width: 600px) {
+            .app-grid {
+                grid-template-columns: 1fr; 
+                grid-template-rows: auto 1fr auto;
+            }
+            .left-sidebar { display: none !important; }
+        }
+        
+        .line-clamp-2 {
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;  
+            overflow: hidden;
+        }
+        
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+        }
+        .modal-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .modal-content {
+            background: #242424;
+            border-radius: 8px;
+            padding: 24px;
+            width: 90%;
+            max-width: 500px;
+            transform: scale(0.95);
+            transition: transform 0.2s ease;
+        }
+        .modal-overlay.active .modal-content {
+            transform: scale(1);
+        }
+        
+        /* Loader */
+        .loader {
+            border: 3px solid rgba(255,255,255,0.1);
+            border-top: 3px solid #1db954;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+    </style>
+</head>
+<body class="text-sm">
+
+    <div class="app-grid">
+        <header class="col-span-full flex items-center justify-between px-2 z-20">
+            <div class="flex items-center gap-6">
+                <i class="fab fa-spotify text-3xl text-white ml-2"></i>
+                <div class="w-12 h-12 rounded-full bg-spotify-elevated flex items-center justify-center hover:scale-105 transition-transform cursor-pointer">
+                    <i class="fas fa-home text-xl text-white"></i>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-2 max-w-[500px] w-full mx-4">
+                <div class="relative flex-1 group">
+                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <i class="fas fa-search text-spotify-light group-focus-within:text-white transition-colors text-lg"></i>
+                    </div>
+                    <!-- Added ID to input for search later if needed -->
+                    <input type="text" id="searchInput" placeholder="What do you want to play?" class="w-full bg-spotify-elevated text-white rounded-full py-3.5 pl-12 pr-12 focus:outline-none focus:ring-2 focus:ring-white focus:bg-spotify-highlight transition-all placeholder-spotify-light border-transparent hover:bg-spotify-hover text-base">
+                    <div class="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none border-l border-gray-600 pl-3">
+                        <i class="far fa-folder text-spotify-light text-lg"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-3">
+                <button class="bg-white text-black px-4 py-2 rounded-full font-bold text-[13px] hover:scale-105 transition-transform hidden md:block">Explore Premium</button>
+                <button class="flex items-center gap-1 text-spotify-light hover:text-white font-semibold text-sm transition-colors hidden xl:flex mx-2">
+                    <i class="far fa-arrow-alt-circle-down text-lg"></i>
+                    Install App
+                </button>
+                <button class="text-spotify-light hover:text-white hover:scale-105 transition-all w-8 h-8 rounded-full flex items-center justify-center"><i class="far fa-bell text-lg"></i></button>
+                <button class="text-spotify-light hover:text-white hover:scale-105 transition-all w-8 h-8 rounded-full flex items-center justify-center"><i class="fas fa-users text-lg"></i></button>
+                <button class="w-8 h-8 rounded-full bg-green-500 text-black font-bold flex items-center justify-center ml-1 text-sm">F</button>
+            </div>
+        </header>
+
+        <aside class="left-sidebar bg-spotify-base rounded-lg flex flex-col overflow-hidden">
+            <div class="px-4 py-3 flex items-center justify-between shadow-sm z-10 sticky top-0 bg-spotify-base">
+                <button class="flex items-center gap-4 text-spotify-light hover:text-white transition-colors font-bold text-base group">
+                    <svg role="img" height="24" width="24" aria-hidden="true" viewBox="0 0 24 24" fill="currentColor" class="group-hover:text-white text-spotify-light transition-colors"><path d="M3 22a1 1 0 0 1-1-1V3a1 1 0 0 1 2 0v18a1 1 0 0 1-1 1zM15.5 2.134A1 1 0 0 0 14 3v18a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V6.464a1 1 0 0 0-.5-.866l-6-3.464zM9 2a1 1 0 0 0-1 1v18a1 1 0 1 0 2 0V3a1 1 0 0 0-1-1z"></path></svg>
+                    Your Library
+                </button>
+                <div class="flex gap-1">
+                    <button class="text-spotify-light hover:text-white hover:bg-spotify-hover w-8 h-8 rounded-full flex items-center justify-center transition-all"><i class="fas fa-plus"></i></button>
+                    <button class="text-spotify-light hover:text-white hover:bg-spotify-hover w-8 h-8 rounded-full flex items-center justify-center transition-all"><i class="fas fa-arrow-right"></i></button>
+                </div>
+            </div>
+
+            <div class="flex-1 overflow-y-auto px-2 pb-2">
+                 <!-- Playlists CTA -->
+                <div class="bg-spotify-elevated rounded-lg p-4 mb-2 mt-2">
+                    <h3 class="font-bold mb-2 text-[15px]">Create your first playlist</h3>
+                    <p class="text-sm text-spotify-light mb-5 font-medium">It's easy, we'll help you</p>
+                    <button class="bg-white text-black font-bold px-4 py-1.5 rounded-full text-sm hover:scale-105 transition-transform">Create playlist</button>
+                </div>
+
+                <!-- Podcasts CTA -->
+                <div class="bg-spotify-elevated rounded-lg p-4 mb-4">
+                    <h3 class="font-bold mb-2 text-[15px]">Let's find some podcasts to follow</h3>
+                    <p class="text-sm text-spotify-light mb-5 font-medium">We'll keep you updated on new episodes</p>
+                    <button class="bg-white text-black font-bold px-4 py-1.5 rounded-full text-sm hover:scale-105 transition-transform">Browse podcasts</button>
+                </div>
+                
+                <!-- AI Playlist Generator CTA -->
+                <div class="bg-gradient-to-br from-indigo-900 to-purple-900 rounded-lg p-4 mb-4 border border-indigo-700/50 hover:border-indigo-500 transition-colors cursor-pointer" onclick="openAiModal()">
+                    <div class="flex items-center gap-2 mb-2">
+                        <i class="fas fa-magic text-purple-400"></i>
+                        <h3 class="font-bold text-[15px] text-purple-100">AI Playlist Generator</h3>
+                    </div>
+                    <p class="text-sm text-purple-300/80 mb-4 font-medium">Tell us what you're feeling, get a custom playlist.</p>
+                    <button class="bg-purple-500 hover:bg-purple-400 text-white font-bold px-4 py-1.5 rounded-full text-sm transition-colors shadow-lg">Try it out</button>
+                </div>
+
+                 <!-- List Items -->
+                 <div class="space-y-1" id="libraryList">
+                    <div class="flex items-center gap-3 p-2 hover:bg-spotify-highlight rounded-md cursor-pointer group transition-colors">
+                        <div class="w-12 h-12 bg-gradient-to-br from-indigo-600 to-blue-400 rounded-md shadow-sm flex items-center justify-center flex-shrink-0">
+                            <i class="fas fa-heart text-white text-lg"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="font-medium text-white truncate text-base">Liked Songs</p>
+                            <p class="text-[13px] text-spotify-light flex items-center gap-1 truncate mt-0.5"><i class="fas fa-thumbtack text-green-500 text-[10px]"></i> Playlist • 120 songs</p>
+                        </div>
+                    </div>
+                 </div>
+            </div>
+        </aside>
+
+        <main class="main-content bg-spotify-base rounded-lg overflow-y-auto relative flex flex-col">
+            
+            <div class="p-6 pb-20 flex-1">
+                
+                <!-- Search Result Header -->
+                <div class="mb-6 mt-2">
+                    <h2 class="text-2xl font-bold text-white tracking-tight">Search Results</h2>
+                </div>
+                
+                 <!-- Two Column Layout for Search Results -->
+                 <div class="flex flex-col lg:flex-row gap-6">
+                     
+                     <!-- Left Column: Top Result -->
+                     <div class="lg:w-[40%] flex flex-col">
+                         <h3 class="text-xl font-bold mb-4">Hasil teratas</h3>
+                         
+                         <div class="bg-[#181818] hover:bg-[#282828] p-5 rounded-lg transition-colors cursor-pointer group relative flex flex-col h-full border border-transparent hover:border-gray-800">
+                             <div class="mb-4 shadow-lg rounded-md overflow-hidden self-start w-[100px] h-[100px] xl:w-[120px] xl:h-[120px]">
+                                <img src="https://placehold.co/300x300/333333/aaaaaa?text=Birds" alt="Top Result" class="w-full h-full object-cover">
+                             </div>
+                             
+                             <div class="mt-auto">
+                                 <h4 class="text-3xl font-bold mb-1 truncate text-white pb-1">everything u are</h4>
+                                 <div class="flex flex-col gap-3">
+                                     <span class="text-[15px] text-spotify-light hover:underline font-medium">Hindia</span>
+                                     <div class="flex items-center gap-2">
+                                        <span class="bg-[#242424] text-white text-xs px-2.5 py-1 rounded-sm uppercase font-bold tracking-wider">Lagu</span>
+                                     </div>
+                                 </div>
+                             </div>
+                             
+                              <div class="absolute bottom-5 right-5 w-[50px] h-[50px] bg-[#1ed760] hover:bg-[#3be477] hover:scale-105 rounded-full flex items-center justify-center shadow-xl opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 z-10">
+                                <i class="fas fa-play text-black text-xl ml-1"></i>
+                            </div>
+                         </div>
+                     </div>
+
+                     <!-- Right Column: Songs List -->
+                     <div class="lg:w-[60%] flex flex-col">
+                          <h3 class="text-xl font-bold mb-4">Lagu</h3>
+                          
+                          <div class="flex flex-col gap-1 w-full" id="songsList">
+                              <!-- Song Item 1 -->
+                              <div class="flex items-center justify-between p-2 rounded-md hover:bg-spotify-highlight group cursor-pointer transition-colors w-full">
+                                  <div class="flex items-center gap-3 min-w-0 flex-1">
+                                      <div class="relative w-10 h-10 bg-neutral-800 rounded flex-shrink-0 shadow-sm">
+                                          <img src="https://placehold.co/40x40/444/aaa?text=C" alt="thumb" class="w-full h-full rounded object-cover">
+                                           <div class="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded">
+                                              <i class="fas fa-play text-white text-xs"></i>
+                                          </div>
+                                      </div>
+                                      <div class="flex flex-col min-w-0 justify-center">
+                                          <span class="text-white text-base font-medium truncate leading-tight">Cincin</span>
+                                          <span class="text-spotify-light text-sm hover:underline truncate hover:text-white transition-colors">Hindia</span>
+                                      </div>
+                                  </div>
+                                  <div class="flex items-center gap-4 text-spotify-light flex-shrink-0 pr-2">
+                                      <i class="far fa-heart hover:text-white opacity-0 group-hover:opacity-100 transition-all text-lg"></i>
+                                      <span class="text-sm w-10 text-right tabular-nums text-spotify-subdued">3:42</span>
+                                      <i class="fas fa-ellipsis-h hover:text-white opacity-0 group-hover:opacity-100 transition-all text-lg"></i>
+                                  </div>
+                              </div>
+                              
+                               <!-- Song Item 2 -->
+                               <div class="flex items-center justify-between p-2 rounded-md hover:bg-spotify-highlight group cursor-pointer transition-colors w-full">
+                                  <div class="flex items-center gap-3 min-w-0 flex-1">
+                                      <div class="relative w-10 h-10 bg-neutral-800 rounded flex-shrink-0 shadow-sm">
+                                          <img src="https://placehold.co/40x40/222/aaa?text=T" alt="thumb" class="w-full h-full rounded object-cover">
+                                           <div class="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded">
+                                              <i class="fas fa-play text-white text-xs"></i>
+                                          </div>
+                                      </div>
+                                      <div class="flex flex-col min-w-0 justify-center">
+                                          <span class="text-white text-base font-medium truncate leading-tight">Tarot</span>
+                                          <span class="text-spotify-light text-sm hover:underline truncate hover:text-white transition-colors">.Feast</span>
+                                      </div>
+                                  </div>
+                                  <div class="flex items-center gap-4 text-spotify-light flex-shrink-0 pr-2">
+                                      <i class="far fa-heart hover:text-white opacity-0 group-hover:opacity-100 transition-all text-lg"></i>
+                                      <span class="text-sm w-10 text-right tabular-nums text-spotify-subdued">4:15</span>
+                                      <i class="fas fa-ellipsis-h hover:text-white opacity-0 group-hover:opacity-100 transition-all text-lg"></i>
+                                  </div>
+                              </div>
+
+                               <!-- Song Item 3 -->
+                               <div class="flex items-center justify-between p-2 rounded-md hover:bg-spotify-highlight group cursor-pointer transition-colors w-full">
+                                  <div class="flex items-center gap-3 min-w-0 flex-1">
+                                      <div class="relative w-10 h-10 bg-neutral-800 rounded flex-shrink-0 shadow-sm">
+                                          <img src="https://placehold.co/40x40/555/aaa?text=R" alt="thumb" class="w-full h-full rounded object-cover">
+                                           <div class="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded">
+                                              <i class="fas fa-play text-white text-xs"></i>
+                                          </div>
+                                      </div>
+                                      <div class="flex flex-col min-w-0 justify-center">
+                                          <span class="text-white text-base font-medium truncate leading-tight">Rumah Ke Rumah</span>
+                                          <span class="text-spotify-light text-sm hover:underline truncate hover:text-white transition-colors">Hindia</span>
+                                      </div>
+                                  </div>
+                                  <div class="flex items-center gap-4 text-spotify-light flex-shrink-0 pr-2">
+                                      <i class="far fa-heart hover:text-white opacity-0 group-hover:opacity-100 transition-all text-lg"></i>
+                                      <span class="text-sm w-10 text-right tabular-nums text-spotify-subdued">4:37</span>
+                                      <i class="fas fa-ellipsis-h hover:text-white opacity-0 group-hover:opacity-100 transition-all text-lg"></i>
+                                  </div>
+                              </div>
+                              
+                              <!-- Song Item 4 -->
+                              <div class="flex items-center justify-between p-2 rounded-md hover:bg-spotify-highlight group cursor-pointer transition-colors w-full">
+                                  <div class="flex items-center gap-3 min-w-0 flex-1">
+                                      <div class="relative w-10 h-10 bg-neutral-800 rounded flex-shrink-0 shadow-sm">
+                                          <img src="https://placehold.co/40x40/666/aaa?text=B" alt="thumb" class="w-full h-full rounded object-cover">
+                                           <div class="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded">
+                                              <i class="fas fa-play text-white text-xs"></i>
+                                          </div>
+                                      </div>
+                                      <div class="flex flex-col min-w-0 justify-center">
+                                          <span class="text-white text-base font-medium truncate leading-tight">Berdansalah, Karir Ini Tak Ada Artinya</span>
+                                          <span class="text-spotify-light text-sm hover:underline truncate hover:text-white transition-colors">Hindia</span>
+                                      </div>
+                                  </div>
+                                  <div class="flex items-center gap-4 text-spotify-light flex-shrink-0 pr-2">
+                                      <i class="far fa-heart hover:text-white opacity-0 group-hover:opacity-100 transition-all text-lg"></i>
+                                      <span class="text-sm w-10 text-right tabular-nums text-spotify-subdued">3:44</span>
+                                      <i class="fas fa-ellipsis-h hover:text-white opacity-0 group-hover:opacity-100 transition-all text-lg"></i>
+                                  </div>
+                              </div>
+                              
+                               <!-- Song Item 5 -->
+                               <div class="flex items-center justify-between p-2 rounded-md hover:bg-spotify-highlight group cursor-pointer transition-colors w-full">
+                                  <div class="flex items-center gap-3 min-w-0 flex-1">
+                                      <div class="relative w-10 h-10 bg-neutral-800 rounded flex-shrink-0 shadow-sm">
+                                          <img src="https://placehold.co/40x40/333/aaa?text=N" alt="thumb" class="w-full h-full rounded object-cover">
+                                           <div class="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded">
+                                              <i class="fas fa-play text-white text-xs"></i>
+                                          </div>
+                                      </div>
+                                      <div class="flex flex-col min-w-0 justify-center">
+                                          <span class="text-white text-base font-medium truncate leading-tight">Nina</span>
+                                          <span class="text-spotify-light text-sm hover:underline truncate hover:text-white transition-colors">.Feast</span>
+                                      </div>
+                                  </div>
+                                  <div class="flex items-center gap-4 text-spotify-light flex-shrink-0 pr-2">
+                                      <i class="far fa-heart hover:text-white opacity-0 group-hover:opacity-100 transition-all text-lg"></i>
+                                      <span class="text-sm w-10 text-right tabular-nums text-spotify-subdued">4:37</span>
+                                      <i class="fas fa-ellipsis-h hover:text-white opacity-0 group-hover:opacity-100 transition-all text-lg"></i>
+                                  </div>
+                              </div>
+                              
+                          </div>
+                     </div>
+                 </div>
+
+            </div>
+        </main>
+
+        <aside class="right-sidebar bg-spotify-base rounded-lg flex flex-col overflow-hidden relative">
+             <div class="px-4 py-3 flex items-center justify-between z-10 bg-spotify-base sticky top-0">
+                <h3 class="font-bold text-base truncate pr-4 text-white hover:underline cursor-pointer">ini abadi</h3>
+                <div class="flex gap-2 text-spotify-subdued flex-shrink-0">
+                    <button class="hover:text-white hover:bg-spotify-hover w-8 h-8 rounded-full flex items-center justify-center transition-all"><i class="fas fa-ellipsis-h"></i></button>
+                    <button class="hover:text-white hover:bg-spotify-hover w-8 h-8 rounded-full flex items-center justify-center transition-all"><i class="fas fa-times"></i></button>
+                </div>
+            </div>
+
+            <div class="flex-1 overflow-y-auto px-4 pb-24">
+                <!-- Large Cover Art -->
+                <div class="w-full rounded-lg overflow-hidden shadow-2xl mb-4 mt-2 relative aspect-square bg-[#282828] group">
+                    <img src="https://placehold.co/400x400/333/aaa?text=Abadi" alt="Now Playing Cover" class="w-full h-full object-cover">
+                     <!-- Expand button overlay on hover -->
+                     <button class="absolute top-2 right-2 w-8 h-8 bg-black/60 rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80 hover:scale-105">
+                         <i class="fas fa-expand-alt text-sm"></i>
+                     </button>
+                </div>
+                
+                <!-- Track Info -->
+                <div class="flex justify-between items-start mb-6">
+                    <div class="flex-1 min-w-0 pr-4">
+                        <h2 class="text-2xl font-bold mb-1 hover:underline cursor-pointer truncate text-white">ini abadi</h2>
+                        <p class="text-spotify-light text-base hover:underline cursor-pointer hover:text-white transition-colors truncate">Perunggu</p>
+                    </div>
+                    <button class="text-spotify-light hover:text-white hover:scale-105 transition-all mt-1 w-8 h-8 flex items-center justify-center flex-shrink-0">
+                        <i class="far fa-plus-square text-xl"></i>
+                    </button>
+                </div>
+
+                <!-- Queue List Header -->
+                <div class="flex justify-between items-end mb-4">
+                     <h3 class="font-bold text-base text-white">Next in queue</h3>
+                     <span class="text-sm text-spotify-light hover:underline hover:text-white cursor-pointer font-medium">Open queue</span>
+                </div>
+
+                <!-- Queue Items -->
+                <div class="flex flex-col gap-1">
+                     <!-- Queue Item 1 -->
+                    <div class="flex items-center justify-between p-2 rounded-md hover:bg-spotify-highlight group cursor-pointer transition-colors -mx-2">
+                        <div class="flex items-center gap-3 min-w-0">
+                             <i class="fas fa-music text-spotify-light text-xs w-4 text-center group-hover:hidden"></i>
+                             <i class="fas fa-play text-white text-xs w-4 text-center hidden group-hover:inline-block"></i>
+                            <div class="flex flex-col min-w-0">
+                                <span class="text-white text-sm font-medium truncate">Lagipula Hidup Akan Berakhir</span>
+                                <span class="text-spotify-light text-xs hover:underline truncate">Hindia</span>
+                            </div>
+                        </div>
+                        <span class="text-xs text-spotify-subdued tabular-nums">4:26</span>
+                    </div>
+                    <!-- Queue Item 2 -->
+                    <div class="flex items-center justify-between p-2 rounded-md hover:bg-spotify-highlight group cursor-pointer transition-colors -mx-2">
+                        <div class="flex items-center gap-3 min-w-0">
+                             <i class="fas fa-music text-spotify-light text-xs w-4 text-center group-hover:hidden"></i>
+                             <i class="fas fa-play text-white text-xs w-4 text-center hidden group-hover:inline-block"></i>
+                            <div class="flex flex-col min-w-0">
+                                <span class="text-white text-sm font-medium truncate">Membangun & Menghancurkan</span>
+                                <span class="text-spotify-light text-xs hover:underline truncate">Hindia</span>
+                            </div>
+                        </div>
+                        <span class="text-xs text-spotify-subdued tabular-nums">4:48</span>
+                    </div>
+                     <!-- Queue Item 3 -->
+                     <div class="flex items-center justify-between p-2 rounded-md hover:bg-spotify-highlight group cursor-pointer transition-colors -mx-2">
+                        <div class="flex items-center gap-3 min-w-0">
+                             <i class="fas fa-music text-spotify-light text-xs w-4 text-center group-hover:hidden"></i>
+                             <i class="fas fa-play text-white text-xs w-4 text-center hidden group-hover:inline-block"></i>
+                            <div class="flex flex-col min-w-0">
+                                <span class="text-white text-sm font-medium truncate">Menari Dengan Bayangan</span>
+                                <span class="text-spotify-light text-xs hover:underline truncate">Hindia</span>
+                            </div>
+                        </div>
+                        <span class="text-xs text-spotify-subdued tabular-nums">4:37</span>
+                    </div>
+                     <!-- Queue Item 4 -->
+                     <div class="flex items-center justify-between p-2 rounded-md hover:bg-spotify-highlight group cursor-pointer transition-colors -mx-2">
+                        <div class="flex items-center gap-3 min-w-0">
+                             <i class="fas fa-music text-spotify-light text-xs w-4 text-center group-hover:hidden"></i>
+                             <i class="fas fa-play text-white text-xs w-4 text-center hidden group-hover:inline-block"></i>
+                            <div class="flex flex-col min-w-0">
+                                <span class="text-white text-sm font-medium truncate">Lagipula Hidup Akan Berakhir</span>
+                                <span class="text-spotify-light text-xs hover:underline truncate">Hindia</span>
+                            </div>
+                        </div>
+                        <span class="text-xs text-spotify-subdued tabular-nums">3:44</span>
+                    </div>
+                </div>
+
+            </div>
+            
+            <!-- Floating Miniplayer -->
+            <div class="absolute bottom-4 left-4 right-4 bg-[#181818] rounded-xl p-3 shadow-2xl flex flex-col gap-2 border border-[#333] z-20">
+                 <!-- Miniplayer Header -->
+                 <div class="flex justify-between items-center mb-1">
+                      <div class="flex gap-2">
+                          <button class="text-spotify-light hover:text-white transition-colors w-6 h-6 flex items-center justify-center"><i class="fas fa-desktop text-xs"></i></button>
+                      </div>
+                      <button class="text-spotify-light hover:text-white transition-colors w-6 h-6 flex items-center justify-center"><i class="fas fa-times text-xs"></i></button>
+                 </div>
+                 
+                 <!-- Miniplayer Main Content -->
+                <div class="flex justify-between items-center px-1">
+                    <div class="flex items-center gap-3 min-w-0 flex-1">
+                        <img src="https://placehold.co/48x48/8c7851/ffffff?text=A" class="w-12 h-12 rounded shadow-md object-cover flex-shrink-0">
+                        <div class="min-w-0">
+                            <p class="text-[15px] font-medium leading-tight truncate hover:underline cursor-pointer text-white">Ini Abadi</p>
+                            <p class="text-[13px] text-spotify-light truncate hover:underline cursor-pointer hover:text-white transition-colors">Perunggu</p>
+                        </div>
+                        <i class="far fa-heart text-spotify-light hover:text-white hover:scale-105 transition-all text-lg ml-2 flex-shrink-0 cursor-pointer"></i>
+                    </div>
+                    <div class="flex items-center gap-4 ml-4 flex-shrink-0">
+                         <button class="text-spotify-light hover:text-white transition-colors"><i class="fas fa-step-backward text-lg"></i></button>
+                        <button class="w-8 h-8 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 transition-transform"><i class="fas fa-pause text-sm"></i></button>
+                        <button class="text-spotify-light hover:text-white transition-colors"><i class="fas fa-step-forward text-lg"></i></button>
+                    </div>
+                </div>
+                
+                <!-- Progress Bar -->
+                <div class="flex items-center gap-2 text-xs text-spotify-light mt-1 px-1">
+                    <span class="tabular-nums min-w-[35px] text-right">1:24</span>
+                    <div class="h-1 bg-[#4d4d4d] rounded-full flex-1 overflow-hidden group cursor-pointer relative">
+                        <div class="absolute inset-0 bg-[#4d4d4d] group-hover:bg-[#535353] transition-colors rounded-full"></div>
+                        <div class="h-full bg-white group-hover:bg-[#1db954] w-[40%] rounded-full relative z-10 transition-colors">
+                             <div class="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full opacity-0 group-hover:opacity-100 shadow-md transform translate-x-1/2 transition-opacity"></div>
+                        </div>
+                    </div>
+                    <span class="tabular-nums min-w-[35px] text-left">-2:11</span>
+                </div>
+            </div>
+        </aside>
+
+    </div>
+
+    <!-- AI Playlist Modal -->
+    <div class="modal-overlay" id="aiModal">
+        <div class="modal-content relative flex flex-col max-h-[90vh]">
+            <button class="absolute top-4 right-4 text-spotify-light hover:text-white w-8 h-8 flex items-center justify-center rounded-full hover:bg-spotify-hover transition-colors" onclick="closeAiModal()">
+                <i class="fas fa-times"></i>
+            </button>
+            
+            <div class="flex items-center gap-3 mb-6">
+                <div class="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center">
+                    <i class="fas fa-magic text-purple-400 text-xl"></i>
+                </div>
+                <div>
+                    <h2 class="text-xl font-bold text-white">AI Playlist Generator</h2>
+                    <p class="text-sm text-spotify-light">Describe what you want to listen to.</p>
+                </div>
+            </div>
+
+            <textarea id="aiPrompt" rows="3" placeholder="e.g. Upbeat pop songs for a morning workout, mostly female artists..." class="w-full bg-[#121212] border border-[#333] rounded-lg p-3 text-white focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all resize-none mb-4 text-sm"></textarea>
+            
+            <button id="generateBtn" onclick="generatePlaylist()" class="bg-purple-600 hover:bg-purple-500 text-white font-bold py-2.5 px-4 rounded-full w-full transition-colors flex items-center justify-center gap-2 mb-4">
+                <span>Generate Playlist</span>
+            </button>
+
+            <!-- Loading State -->
+            <div id="aiLoading" class="hidden flex-col items-center justify-center py-6">
+                <div class="loader mb-3"></div>
+                <p class="text-sm text-spotify-light" id="loadingText">Curating your perfect playlist...</p>
+            </div>
+
+            <!-- Result State -->
+            <div id="aiResultArea" class="hidden flex-col flex-1 min-h-0">
+                <div class="flex items-center justify-between mb-3 shrink-0">
+                    <h3 class="font-bold text-white text-lg" id="generatedTitle">Generated Playlist</h3>
+                    <button class="text-xs bg-white text-black px-3 py-1 rounded-full font-bold hover:scale-105 transition-transform" onclick="savePlaylist()">Save to Library</button>
+                </div>
+                <div class="overflow-y-auto pr-2 pb-2 space-y-1" id="generatedTrackList">
+                    <!-- Tracks will be injected here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Modal logic
+        const modal = document.getElementById('aiModal');
+        const promptInput = document.getElementById('aiPrompt');
+        const generateBtn = document.getElementById('generateBtn');
+        const loadingState = document.getElementById('aiLoading');
+        const resultArea = document.getElementById('aiResultArea');
+        const trackListContainer = document.getElementById('generatedTrackList');
+        const generatedTitle = document.getElementById('generatedTitle');
+        let currentGeneratedPlaylist = null;
+
+        function openAiModal() {
+            modal.classList.add('active');
+            promptInput.focus();
+        }
+
+        function closeAiModal() {
+            modal.classList.remove('active');
+            // Reset state after transition
+            setTimeout(() => {
+                promptInput.value = '';
+                resetAiModalState();
+            }, 300);
+        }
+
+        function resetAiModalState() {
+            generateBtn.style.display = 'flex';
+            promptInput.style.display = 'block';
+            loadingState.classList.add('hidden');
+            loadingState.classList.remove('flex');
+            resultArea.classList.add('hidden');
+            resultArea.classList.remove('flex');
+            trackListContainer.innerHTML = '';
+        }
+
+        // Generate Playlist via Gemini API
+        async function generatePlaylist() {
+            const prompt = promptInput.value.trim();
+            if (!prompt) return;
+
+            // UI transitions
+            generateBtn.style.display = 'none';
+            promptInput.style.display = 'none';
+            loadingState.classList.remove('hidden');
+            loadingState.classList.add('flex');
+            resultArea.classList.add('hidden');
+            resultArea.classList.remove('flex');
+            
+            // Cycle loading text
+            const loadingMessages = ["Analyzing mood...", "Finding the right tracks...", "Mixing it together..."];
+            let msgIndex = 0;
+            const loadingInterval = setInterval(() => {
+                msgIndex = (msgIndex + 1) % loadingMessages.length;
+                document.getElementById('loadingText').innerText = loadingMessages[msgIndex];
+            }, 2000);
+
+            try {
+                // Call Gemini API for structured JSON response
+                const payload = {
+                    contents: [{
+                        role: "user",
+                        parts: [{ text: `Generate a Spotify-style playlist based on this prompt: "${prompt}". Return ONLY a JSON object. Ensure it follows the schema requested.` }]
+                    }],
+                    generationConfig: {
+                        responseMimeType: "application/json",
+                        responseSchema: {
+                            type: "OBJECT",
+                            properties: {
+                                "playlistName": { "type": "STRING", "description": "A catchy name for the playlist" },
+                                "description": { "type": "STRING", "description": "A short description of the vibe" },
+                                "tracks": {
+                                    "type": "ARRAY",
+                                    "items": {
+                                        "type": "OBJECT",
+                                        "properties": {
+                                            "title": { "type": "STRING" },
+                                            "artist": { "type": "STRING" },
+                                            "duration": { "type": "STRING", "description": "Format M:SS" }
+                                        }
+                                    }
+                                }
+                            },
+                            "required": ["playlistName", "tracks"]
+                        }
+                    }
+                };
+
+                const apiKey = ""; // API key is injected by the environment
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const result = await response.json();
+                
+                clearInterval(loadingInterval);
+
+                if (result.candidates && result.candidates[0].content.parts[0].text) {
+                    const jsonText = result.candidates[0].content.parts[0].text;
+                    const playlistData = JSON.parse(jsonText);
+                    currentGeneratedPlaylist = playlistData;
+                    displayGeneratedPlaylist(playlistData);
+                } else {
+                    throw new Error("Invalid response format");
+                }
+
+            } catch (error) {
+                console.error("Error generating playlist:", error);
+                clearInterval(loadingInterval);
+                loadingState.classList.add('hidden');
+                loadingState.classList.remove('flex');
+                generateBtn.style.display = 'flex';
+                promptInput.style.display = 'block';
+                // Very basic error indication without alert()
+                promptInput.value = "Sorry, failed to generate. Please try again.";
+                setTimeout(() => promptInput.value = prompt, 2000);
+            }
+        }
+
+        function displayGeneratedPlaylist(data) {
+            loadingState.classList.add('hidden');
+            loadingState.classList.remove('flex');
+            resultArea.classList.remove('hidden');
+            resultArea.classList.add('flex');
+
+            generatedTitle.innerText = data.playlistName;
+            
+            let html = '';
+            // Determine a theme color for placeholders based on name length just for variety
+            const colorHue = (data.playlistName.length * 15) % 360;
+            
+            data.tracks.forEach((track, index) => {
+                html += `
+                    <div class="flex items-center justify-between p-2 rounded-md hover:bg-[#2a2a2a] group cursor-pointer transition-colors w-full">
+                        <div class="flex items-center gap-3 min-w-0 flex-1">
+                            <div class="relative w-10 h-10 rounded flex-shrink-0 shadow-sm" style="background-color: hsl(${colorHue}, 30%, 20%)">
+                                 <div class="absolute inset-0 flex items-center justify-center text-white/50 text-xs font-bold">${track.title.charAt(0)}</div>
+                                 <div class="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded">
+                                    <i class="fas fa-play text-white text-xs"></i>
+                                </div>
+                            </div>
+                            <div class="flex flex-col min-w-0 justify-center">
+                                <span class="text-white text-[15px] font-medium truncate leading-tight">${track.title}</span>
+                                <span class="text-spotify-light text-xs hover:underline truncate hover:text-white transition-colors">${track.artist}</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3 text-spotify-light flex-shrink-0 pl-2">
+                            <i class="far fa-heart hover:text-white opacity-0 group-hover:opacity-100 transition-all"></i>
+                            <span class="text-xs w-10 text-right tabular-nums text-spotify-subdued">${track.duration || '3:30'}</span>
+                        </div>
+                    </div>
+                `;
+            });
+            trackListContainer.innerHTML = html;
+        }
+
+        // Add saved playlist to the left sidebar library
+        function savePlaylist() {
+            if (!currentGeneratedPlaylist) return;
+            
+            const libraryList = document.getElementById('libraryList');
+            const colorHue = (currentGeneratedPlaylist.playlistName.length * 15) % 360;
+            
+            const newPlaylistItem = document.createElement('div');
+            newPlaylistItem.className = 'flex items-center gap-3 p-2 hover:bg-spotify-highlight rounded-md cursor-pointer group transition-colors';
+            newPlaylistItem.innerHTML = `
+                <div class="w-12 h-12 rounded-md shadow-sm flex items-center justify-center flex-shrink-0" style="background: linear-gradient(135deg, hsl(${colorHue}, 60%, 40%), hsl(${(colorHue + 40)%360}, 50%, 30%))">
+                    <i class="fas fa-music text-white text-lg opacity-70"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <p class="font-medium text-white truncate text-base">${currentGeneratedPlaylist.playlistName}</p>
+                    <p class="text-[13px] text-spotify-light flex items-center gap-1 truncate mt-0.5">Playlist • ${currentGeneratedPlaylist.tracks.length} songs</p>
+                </div>
+            `;
+            
+            // Insert after Liked Songs
+            libraryList.insertBefore(newPlaylistItem, libraryList.children[1]);
+            
+            closeAiModal();
+            
+            // Optional: Show a little toast notification (simulated)
+            const saveBtn = document.querySelector('#aiResultArea button');
+            const originalText = saveBtn.innerText;
+            saveBtn.innerText = "Saved!";
+            saveBtn.classList.add('bg-green-500', 'text-black');
+            saveBtn.classList.remove('bg-white');
+            setTimeout(() => {
+                saveBtn.innerText = originalText;
+                saveBtn.classList.remove('bg-green-500', 'text-black');
+                saveBtn.classList.add('bg-white');
+            }, 2000);
+        }
+
+        // Close modal on outside click
+        window.onclick = function(event) {
+            if (event.target == modal) {
+                closeAiModal();
+            }
+        }
+    </script>
+</body>
+</html>
