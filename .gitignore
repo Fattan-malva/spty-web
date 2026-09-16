@@ -32,3 +32,8 @@ htmlcov/
 *.code-workspace
 .DS_Store
 Thumbs.db
+
+# VPS Configuration
+Dockerfile
+docker-compose
+restart.sh

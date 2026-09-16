@@ -232,12 +232,13 @@ async def get_user_liked_tracks(app, sp_dc: str) -> dict:
     total = lib.get("totalCount", 0)
     items = []
     for entry in lib.get("items", []):
-        track = (entry.get("item") or {}).get("data") or entry.get("data") or {}
+        wrapper = entry.get("track") or {}
+        track = wrapper.get("data") or {}
         if not track.get("name"):
             continue
         track_id = track.get("id") or ""
         if not track_id:
-            uri = track.get("uri") or ""
+            uri = wrapper.get("_uri") or track.get("uri") or ""
             track_id = uri.split(":")[-1] if ":" in uri else ""
         if not track_id:
             continue
@@ -247,7 +248,8 @@ async def get_user_liked_tracks(app, sp_dc: str) -> dict:
         album = track.get("albumOfTrack") or {}
         sources = (album.get("coverArt") or {}).get("sources") or []
         cover = max(sources, key=lambda s: s.get("width") or 0).get("url") if sources else None
-        dur_ms = (track.get("trackDuration") or {}).get("totalMilliseconds") or 0
+        dur_ms = (track.get("trackDuration") or {}).get("totalMilliseconds") \
+                 or (track.get("duration") or {}).get("totalMilliseconds") or 0
         items.append({
             "trackId": track_id,
             "title": track.get("name", ""),
