@@ -102,7 +102,7 @@ body {
   transform: translateX(-50%) translateY(0);
 }
 
-/* Fullscreen Spotify login modal */
+/* Spotify login modal (manual sp_dc input) */
 body.modal-open {
   overflow: hidden;
 }
@@ -112,38 +112,79 @@ body.modal-open {
   inset: 0;
   z-index: 1000;
   display: flex;
-  flex-direction: column;
-  background: #000;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, .72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 .login-modal[hidden] {
   display: none;
 }
-.login-modal-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  height: 52px;
-  padding: 0 12px 0 18px;
-  background: #121212;
-  border-bottom: 1px solid rgba(255, 255, 255, .1);
-  flex-shrink: 0;
+
+.login-card {
+  width: 100%;
+  max-width: 460px;
+  background: #181818;
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, .6);
+  animation: loginPop .18s ease both;
 }
-.login-modal-title {
+@keyframes loginPop {
+  from { opacity: 0; transform: translateY(10px) scale(.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.login-card-head {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-weight: 700;
-  font-size: 15px;
+  gap: 14px;
+  padding: 18px 20px;
+  background: linear-gradient(180deg, #1f1f1f, #181818);
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+}
+.login-card-icon {
+  width: 46px;
+  height: 46px;
+  min-width: 46px;
+  border-radius: 50%;
+  background: #1db954;
+  color: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+}
+.login-card-title {
+  flex: 1;
+  min-width: 0;
+}
+.login-card-title h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 800;
   color: #fff;
 }
-.login-modal-title i {
-  color: #1db954;
-  font-size: 20px;
+.login-card-title p {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  color: #b3b3b3;
 }
-.login-modal-bar button {
-  width: 36px;
-  height: 36px;
+.login-card-title code,
+.login-card-help code {
+  background: rgba(255, 255, 255, .1);
+  padding: 1px 5px;
+  border-radius: 5px;
+  font-size: 11.5px;
+  color: #fff;
+}
+.login-card-head > button {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
   border: 0;
   border-radius: 50%;
   background: transparent;
@@ -152,27 +193,69 @@ body.modal-open {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
+  font-size: 16px;
 }
-.login-modal-bar button:hover {
+.login-card-head > button:hover {
   background: rgba(255, 255, 255, .1);
   color: #fff;
 }
-.login-modal iframe {
-  flex: 1;
-  width: 100%;
-  border: 0;
-  background: #fff;
+
+.login-card-body {
+  padding: 22px 20px 20px;
 }
-.login-modal-hint {
-  flex-shrink: 0;
-  padding: 8px 16px;
-  background: #121212;
-  border-top: 1px solid rgba(255, 255, 255, .08);
-  color: #8f8f8f;
+.login-card-body label {
+  display: block;
   font-size: 12px;
-  text-align: center;
+  font-weight: 700;
+  color: #d1d1d1;
+  margin-bottom: 8px;
 }
+.login-card-body input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 10px;
+  background: #121212;
+  color: #fff;
+  font-size: 14px;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+.login-card-body input:focus {
+  border-color: #1db954;
+  box-shadow: 0 0 0 3px rgba(29, 185, 84, .18);
+}
+.login-card-body input::placeholder {
+  color: #6a6a6a;
+}
+#spdcSave {
+  width: 100%;
+  margin-top: 14px;
+  padding: 12px 16px;
+  border: 0;
+  border-radius: 999px;
+  background: #1db954;
+  color: #04210e;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background .15s, transform .1s;
+}
+#spdcSave:hover { background: #22d765; }
+#spdcSave:active { transform: scale(.98); }
+#spdcSave:disabled { opacity: .6; cursor: default; }
+
+.login-card-help {
+  margin: 16px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, .08);
+  font-size: 12px;
+  line-height: 1.6;
+  color: #9b9b9b;
+}
+.login-card-help strong { color: #e8e8e8; }
+.login-card-help em { color: #c9c9c9; }
 
 /* sp_dc banner */
 .spdc-banner {

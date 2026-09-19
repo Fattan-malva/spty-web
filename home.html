@@ -9,8 +9,8 @@
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="/static/home.css?v=10">
-  <link rel="stylesheet" href="/static/mini-player-fix.css?v=10">
+  <link rel="stylesheet" href="/static/home.css?v=12">
+  <link rel="stylesheet" href="/static/mini-player-fix.css?v=12">
 </head>
 
 <body class="text-sm">
@@ -201,19 +201,31 @@
   <!-- ===================== OVERLAYS ===================== -->
 
   <div class="login-modal" id="loginModal" hidden>
-    <div class="login-modal-bar">
-      <div class="login-modal-title">
-        <i class="fab fa-spotify"></i>
-        <span>Masuk dengan Spotify</span>
+    <div class="login-card">
+      <div class="login-card-head">
+        <div class="login-card-icon"><i class="fab fa-spotify"></i></div>
+        <div class="login-card-title">
+          <h2>Masuk dengan Spotify</h2>
+          <p>Tempel cookie <code>sp_dc</code> dari akun Spotify kamu.</p>
+        </div>
+        <button id="loginClose" type="button" title="Tutup" aria-label="Tutup">
+          <i class="fas fa-xmark"></i>
+        </button>
       </div>
-      <button id="loginClose" type="button" title="Tutup" aria-label="Tutup">
-        <i class="fas fa-xmark"></i>
-      </button>
-    </div>
-    <iframe id="loginFrame" title="Login Spotify" src="about:blank"
-      allow="clipboard-write; autoplay"></iframe>
-    <div class="login-modal-hint" id="loginHint">
-      Login memakai email/username dan password. Setelah berhasil, sp_dc tersimpan otomatis.
+
+      <div class="login-card-body">
+        <label for="spdcInput">sp_dc</label>
+        <input type="text" id="spdcInput" autocomplete="off" spellcheck="false"
+          placeholder="Tempel sp_dc di sini..." />
+        <button id="spdcSave" type="button">Simpan &amp; Masuk</button>
+
+        <p class="login-card-help">
+          Cara mendapat <code>sp_dc</code>: buka <strong>open.spotify.com</strong>, login dengan akun kamu,
+          tekan <em>Ctrl+Shift+I</em> (DevTools) &rarr; tab <em>Application</em> &rarr;
+          <em>Cookies</em> &rarr; <em>https://open.spotify.com</em>, lalu salin nilai cookie
+          <code>sp_dc</code>. Di Firefox pakai tab <em>Storage</em> &rarr; <em>Cookies</em>.
+        </p>
+      </div>
     </div>
   </div>
 
@@ -236,10 +248,10 @@
   </div>
 
   <script src="https://unpkg.com/lucide@latest"></script>
-  <script src="/static/queue.js?v=10"></script>
-  <script src="/static/home.js?v=10"></script>
-  <script src="/static/playback-fixes.js?v=10"></script>
-  <script src="/static/mini-player-fix.js?v=10"></script>
+  <script src="/static/queue.js?v=12"></script>
+  <script src="/static/home.js?v=12"></script>
+  <script src="/static/playback-fixes.js?v=12"></script>
+  <script src="/static/mini-player-fix.js?v=12"></script>
 </body>
 
 </html>

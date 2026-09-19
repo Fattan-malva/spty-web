@@ -43,7 +43,13 @@ pip install -r requirements.txt
 
 ## Konfigurasi
 
-Buka halaman aplikasi lalu klik **Masuk dengan Spotify**. Halaman login resmi Spotify ditampilkan penuh di dalam modal. Setelah login berhasil, cookie `sp_dc` diambil otomatis, disimpan di cookie browser (30 hari), dan modal tertutup sendiri. Tidak ada lagi input `sp_dc` manual maupun file `settings.json` — kredensial tersimpan per pengguna di browser.
+Buka halaman aplikasi lalu klik **Masuk dengan Spotify**. Masukkan cookie `sp_dc` secara manual di modal:
+
+1. Buka `https://open.spotify.com`, lalu login dengan akun Spotify kamu (metode apa pun: email, Google, Facebook, Apple).
+2. Tekan `Ctrl+Shift+I` (DevTools) → tab **Application** → **Cookies** → `https://open.spotify.com` (di Firefox: **Storage** → **Cookies**).
+3. Salin nilai cookie `sp_dc` dan tempel di modal aplikasi, lalu klik **Simpan & Masuk**.
+
+Kredensial tersimpan per pengguna di cookie browser (30 hari) — tidak ada file `settings.json` maupun input otomatis. Pahami bahwa `sp_dc` adalah kredensial yang sama kuatnya dengan password; jangan bagikan.
 
 Untuk request API, `sp_dc` dapat dikirim melalui query parameter `sp_dc`, cookie `sp_dc`, atau header `x-sp-dc`. Aplikasi memuat file `.env` untuk konfigurasi proses. Variabel runtime yang tersedia:
 
@@ -92,7 +98,6 @@ Gunakan satu worker karena cache aplikasi dikelola dalam lifecycle proses.
 | `GET` | `/track?trackId=...` | Metadata track |
 | `GET` | `/lyrics?trackId=...` | Lirik track |
 | `GET` | `/embed-proxy?trackId=...` | Embed player melalui proxy |
-| `GET` | `/auth/login` | Proxy halaman login resmi Spotify (same-origin) |
 | `GET` | `/api/session` | Status sesi `sp_dc` di cookie |
 | `DELETE` | `/api/session` | Logout dan hapus cookie `sp_dc` |
 | `GET` | `/health` | Status service dan concurrency |
@@ -106,7 +111,6 @@ Endpoint track, lyrics, dan embed menerima query `sp_dc` opsional untuk mode kre
 .
 ├── app/
 │   ├── application.py  # Factory FastAPI dan lifecycle
-│   ├── auth_proxy.py   # Proxy login resmi Spotify (same-origin) + relay cookie
 │   ├── config.py       # Konfigurasi, timeout, dan cache
 │   ├── routes.py       # HTTP routes
 │   ├── services.py     # Orkestrasi pencarian, metadata, lirik, dan embed
@@ -138,6 +142,6 @@ Untuk menghentikan server, tekan `Ctrl+C` pada terminal yang menjalankannya.
 
 - `sp_dc` harus diperlakukan seperti password dan segera dicabut atau diganti jika bocor.
 - Aplikasi ini ditujukan untuk penggunaan lokal atau jaringan tepercaya. Sebelum dipublikasikan, tambahkan autentikasi, batasi CORS, gunakan HTTPS, dan lindungi endpoint cache.
-- Proxy login meneruskan halaman resmi Spotify apa adanya. Login email/username + password otomatis menangkap `sp_dc`; login lewat Google/Facebook/Apple mengandalkan cookie pihak ketiga sehingga bisa diblokir browser.
+- Login hanya melalui input manual cookie `sp_dc` di modal/gate aplikasi. Nilai dikirim sebagai JSON ke `POST /api/session` dan disimpan di cookie browser (berdomain aplikasi, bukan domain Spotify).
 - Integrasi Spotify bergantung pada endpoint dan perilaku embed yang dapat berubah sewaktu-waktu.
 - Pastikan penggunaan aplikasi mematuhi Terms of Use Spotify dan hak akses akun yang digunakan.

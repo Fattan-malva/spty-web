@@ -1499,6 +1499,43 @@ body.lyrics-mode #pvLyrics {
   background: rgba(255, 255, 255, .14)
 }
 
+.gate-card .gate-spdc {
+  width: 100%;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 12px;
+  background: #121212;
+  color: #fff;
+  font-size: 14px;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  outline: none;
+  transition: border-color .15s, box-shadow .15s
+}
+
+.gate-card .gate-spdc:focus {
+  border-color: #1db954;
+  box-shadow: 0 0 0 3px rgba(29, 185, 84, .18)
+}
+
+.gate-card .gate-spdc::placeholder {
+  color: #6a6a6a
+}
+
+.gate-card .gate-hint {
+  font-size: 12px;
+  color: rgba(255, 255, 255, .45);
+  margin-top: 16px;
+  margin-bottom: 0
+}
+
+.gate-card .gate-hint code {
+  background: rgba(255, 255, 255, .1);
+  padding: 1px 5px;
+  border-radius: 5px;
+  font-size: 11px
+}
+
 /* ---------- TOAST ---------- */
 #toast {
   position: fixed;

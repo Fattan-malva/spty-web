@@ -36,6 +36,7 @@
     gate: document.getElementById('gate'),
     gateBack: document.getElementById('gateBack'),
     gateLogin: document.getElementById('gateLogin'),
+    gateSpdc: document.getElementById('gateSpdc'),
     autoplayFail: document.getElementById('autoplayFail'),
     autoplayFailBtn: document.getElementById('autoplayFailBtn'),
     toast: document.getElementById('toast')
@@ -576,35 +577,38 @@
   el.gateBack.addEventListener('click', function () { location.href = '/'; });
 
   if (el.gateLogin) {
-    el.gateLogin.addEventListener('click', function () {
-      var w = window.open('/auth/login', 'spotify-login', 'width=520,height=760,scrollbars=yes');
-      if (!w) {
-        toast('Popup diblokir. Izinkan popup dari situs ini lalu coba lagi.');
+    function submitSpdc() {
+      var dc = el.gateSpdc.value.trim();
+      if (dc.length < 20) {
+        toast('sp_dc tidak valid (minimal 20 karakter)', 3200);
         return;
       }
-      var done = false;
-      function finishLogin(dc) {
-        if (done) return;
-        done = true;
-        clearInterval(t);
-        try { if (w && !w.closed) w.close(); } catch (e) {}
+      el.gateLogin.disabled = true;
+      fetch('/api/session', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sp_dc: dc })
+      }).then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      }).then(function () {
         state.spDc = dc;
         hideGate();
         renderQueue();
         openPlayer(trackId);
-      }
-      var t = setInterval(function () {
-        var dc = getCookie('sp_dc');
-        if (dc && dc.length >= 20) {
-          finishLogin(dc);
-          return;
-        }
-        if (w.closed) {
-          clearInterval(t);
-          if (!done) toast('Belum ada sp_dc di cookie. Coba lagi.');
-        }
-      }, 700);
-    });
+      }).catch(function () {
+        toast('Gagal menyimpan sp_dc', 3200);
+      }).then(function () {
+        el.gateLogin.disabled = false;
+      });
+    }
+    el.gateLogin.addEventListener('click', submitSpdc);
+    if (el.gateSpdc) {
+      el.gateSpdc.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') submitSpdc();
+      });
+    }
   }
 
   document.addEventListener('keydown', function (e) {

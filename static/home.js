@@ -11,7 +11,6 @@
     requestId: 0,
     suggestionTimer: null,
     suggestionRequestId: 0,
-    sessionTimer: null,
     playlists: [],
     liked: { total: 0, items: [] },
     currentPlaylist: null
@@ -60,8 +59,9 @@
     loginBtn: document.getElementById('loginBtn'),
     loggedUser: document.getElementById('loggedUser'),
     loginModal: document.getElementById('loginModal'),
-    loginFrame: document.getElementById('loginFrame'),
     loginClose: document.getElementById('loginClose'),
+    spdcInput: document.getElementById('spdcInput'),
+    spdcSave: document.getElementById('spdcSave'),
     toast: document.getElementById('toast')
   };
 
@@ -164,45 +164,48 @@
   }
 
   function openLoginModal() {
-    el.loginFrame.src = '/auth/login?t=' + Date.now();
+    if (el.spdcInput) el.spdcInput.value = '';
     el.loginModal.hidden = false;
     document.body.classList.add('modal-open');
-    startSessionPolling();
+    if (el.spdcInput) setTimeout(function () { el.spdcInput.focus(); }, 60);
   }
 
   function closeLoginModal() {
     el.loginModal.hidden = true;
     document.body.classList.remove('modal-open');
-    stopSessionPolling();
-  }
-
-  function startSessionPolling() {
-    stopSessionPolling();
-    state.sessionTimer = setInterval(function () {
-      fetch('/api/session', { credentials: 'same-origin' })
-        .then(function (r) { return r.json(); })
-        .then(function (d) {
-          if (d && d.loggedIn) onLoggedIn();
-        })
-        .catch(function () {});
-    }, 1200);
-  }
-
-  function stopSessionPolling() {
-    if (state.sessionTimer) {
-      clearInterval(state.sessionTimer);
-      state.sessionTimer = null;
-    }
   }
 
   function onLoggedIn() {
-    var dc = getCookie('sp_dc');
-    if (!dc || dc.length < 20) return;
-    state.spDc = dc;
-    syncSpdcUI();
+    if (el.spdcInput) el.spdcInput.value = '';
     closeLoginModal();
     toast('Login berhasil. sp_dc tersimpan di cookie.');
     loadLibrary();
+  }
+
+  function submitSpdc() {
+    var spDc = el.spdcInput.value.trim();
+    if (spDc.length < 20) {
+      toast('sp_dc tidak valid (minimal 20 karakter)', 3200);
+      return;
+    }
+    if (el.spdcSave) el.spdcSave.disabled = true;
+    fetch('/api/session', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sp_dc: spDc })
+    }).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    }).then(function () {
+      state.spDc = spDc;
+      syncSpdcUI();
+      onLoggedIn();
+    }).catch(function () {
+      toast('Gagal menyimpan sp_dc', 3200);
+    }).then(function () {
+      if (el.spdcSave) el.spdcSave.disabled = false;
+    });
   }
 
   function logoutSpdc() {
@@ -639,9 +642,6 @@
     if (e.data.type === 'queue-updated') {
       renderQueue();
     }
-    if (e.data === 'loginSuccess' || (e.data && e.data.type === 'spdc-saved')) {
-      if (getCookie('sp_dc')) onLoggedIn();
-    }
   });
 
   function updateNowPlaying(playback) {
@@ -660,6 +660,12 @@
   if (el.loginBtn) el.loginBtn.addEventListener('click', openLoginModal);
   if (el.libraryLogin) el.libraryLogin.addEventListener('click', openLoginModal);
   if (el.loginClose) el.loginClose.addEventListener('click', closeLoginModal);
+  if (el.spdcSave) el.spdcSave.addEventListener('click', submitSpdc);
+  if (el.spdcInput) {
+    el.spdcInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') submitSpdc();
+    });
+  }
   if (el.loggedUser) el.loggedUser.addEventListener('click', logoutSpdc);
   if (el.libraryReload) el.libraryReload.addEventListener('click', function () {
     loadLibrary();
@@ -735,5 +741,6 @@
       history.replaceState(null, '', location.pathname);
     }
   }).catch(function (e) { console.error('init error', e); });
+
   console.log('home.js loaded', { loginBtn: !!el.loginBtn, spDc: !!state.spDc });
 })();

@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Spotify Player</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-  <link rel="stylesheet" href="/static/app.css?v=10">
+  <link rel="stylesheet" href="/static/app.css?v=11">
   <style>
     html.mini-embed,
     html.mini-embed body {
@@ -139,18 +139,23 @@
     <div class="gate-card">
       <div class="gicon"><i class="fa-brands fa-spotify"></i></div>
       <h2>Login Spotify Diperlukan</h2>
-      <p>Untuk memutar lagu, kamu perlu login dengan akun Spotify. Klik tombol di bawah lalu login di popup. sp_dc tersimpan otomatis.</p>
-      <button id="gateLogin" class="gate-login"><i class="fa-brands fa-spotify"></i> Masuk dengan Spotify</button>
+      <p>Untuk memutar lagu, kamu perlu cookie <code>sp_dc</code> akun Spotify. Tempel nilainya di bawah.</p>
+      <input type="text" id="gateSpdc" class="gate-spdc" placeholder="Tempel sp_dc di sini..."
+        autocomplete="off" spellcheck="false" />
+      <button id="gateLogin" class="gate-login"><i class="fa-brands fa-spotify"></i> Simpan &amp; Masuk</button>
       <button id="gateBack">Kembali ke Beranda</button>
+      <p class="gate-hint">Cara mendapat sp_dc: buka <strong>open.spotify.com</strong>, login, tekan
+        <em>Ctrl+Shift+I</em> (DevTools) &rarr; <em>Application</em> &rarr; <em>Cookies</em> &rarr;
+        salin nilai cookie <code>sp_dc</code>.</p>
     </div>
   </div>
 
   <div id="toast"></div>
 
   <script src="https://unpkg.com/lucide@latest"></script>
-  <script src="/static/queue.js?v=10"></script>
-  <script src="/static/player.js?v=10"></script>
-  <script src="/static/player-controls.js?v=10"></script>
+  <script src="/static/queue.js?v=11"></script>
+  <script src="/static/player.js?v=11"></script>
+  <script src="/static/player-controls.js?v=11"></script>
 </body>
 
 </html>
