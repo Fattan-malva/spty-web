@@ -90,6 +90,14 @@
     });
   }
 
+  function playlistTrackCount(playlist) {
+    var tracks = playlist && playlist.tracks;
+    var count = playlist && (playlist.trackCount ?? playlist.track_count ?? playlist.totalCount ?? playlist.total);
+    if (count === undefined && tracks) count = tracks.total;
+    count = Number(count);
+    return Number.isFinite(count) && count >= 0 ? count : 0;
+  }
+
   function showView(name) {
     el.viewHome.classList.toggle('active', name === 'home');
     el.viewSearch.classList.toggle('active', name === 'search');
@@ -269,7 +277,7 @@
       card.innerHTML =
         '<div class="pl-cover">' + img + '</div>' +
         '<div class="pl-name">' + escapeHtml(pl.name || 'Unknown') + '</div>' +
-        '<div class="pl-meta">' + (pl.trackCount || 0) + ' lagu</div>';
+        '<div class="pl-meta">' + playlistTrackCount(pl) + ' lagu</div>';
       el.playlistGrid.appendChild(card);
     });
   }

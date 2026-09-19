@@ -37,3 +37,4 @@ Thumbs.db
 Dockerfile
 docker-compose
 restart.sh
+compose.yaml

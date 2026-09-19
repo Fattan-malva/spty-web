@@ -188,7 +188,47 @@ async def get_lyrics(app, track_id: str, sp_dc: str) -> dict:
 
 
 async def get_user_playlists(app, sp_dc: str) -> dict:
-    """Fetch user playlists via GraphQL (libraryV3)."""
+    """Fetch user playlists. Web API menyediakan total lagu (tracks.total)
+    dalam satu panggilan; GraphQL libraryV3 dipakai sebagai fallback."""
+    try:
+        return await _user_playlists_webapi(app, sp_dc)
+    except Exception:
+        return await _user_playlists_graphql(app, sp_dc)
+
+
+async def _user_playlists_webapi(app, sp_dc: str) -> dict:
+    data = await spotify.spotify_web_api_get(
+        app, "/v1/me/playlists", sp_dc,
+        {"limit": 50, "offset": 0},
+    )
+    playlists = []
+    for entry in data.get("items") or []:
+        if not isinstance(entry, dict):
+            continue
+        if not entry.get("name") or not entry.get("id"):
+            continue
+        images = entry.get("images") or []
+        cover = images[0].get("url") if images and images[0].get("url") else None
+        try:
+            track_count = int((entry.get("tracks") or {}).get("total") or 0)
+        except (TypeError, ValueError):
+            track_count = 0
+        playlists.append({
+            "id": entry["id"],
+            "name": entry.get("name", ""),
+            "description": (entry.get("description") or "")[:120],
+            "images": [{"url": cover}] if cover else [],
+            "trackCount": track_count,
+            "owner": (entry.get("owner") or {}).get("display_name") or "",
+        })
+    # Amankan: isi lewat fetchPlaylist bila masih ada count 0 (Web API bisa
+    # saja tidak menyediakan tracks.total untuk sebagian playlist).
+    if any(p["trackCount"] == 0 for p in playlists):
+        await _fill_playlist_counts(app, sp_dc, playlists)
+    return {"items": playlists}
+
+
+async def _user_playlists_graphql(app, sp_dc: str) -> dict:
     data = await spotify.spotify_query(
         app, "libraryV3",
         {"limit": 50, "offset": 0},
@@ -215,10 +255,74 @@ async def get_user_playlists(app, sp_dc: str) -> dict:
             "name": pl.get("name", ""),
             "description": (pl.get("description") or "")[:120],
             "images": [{"url": cover}] if cover else [],
-            "trackCount": 0,
+            "trackCount": _extract_track_count(pl, item),
             "owner": owner.get("name", ""),
         })
+    await _fill_playlist_counts(app, sp_dc, playlists)
     return {"items": playlists}
+
+
+async def _fill_playlist_counts(app, sp_dc: str, playlists: list) -> None:
+    """Isi trackCount tiap playlist via query fetchPlaylist (limit=1, cukup
+    baca pagingInfo.total) — query yang sama dengan halaman detail playlist."""
+    targets = [p for p in playlists if p.get("id") and p.get("trackCount", 0) == 0]
+    if not targets:
+        return
+    sem = asyncio.Semaphore(6)
+
+    async def count_one(playlist: dict) -> None:
+        try:
+            async with sem:
+                data = await spotify.spotify_query(
+                    app, "fetchPlaylist",
+                    {"uri": f"spotify:playlist:{playlist['id']}",
+                     "offset": 0, "limit": 100,
+                     "enableWatchFeedEntrypoint": False,
+                     "includeAudiobooks": False},
+                    sp_dc=sp_dc,
+                )
+        except Exception:
+            return
+        content = ((data.get("data") or {}).get("playlistV2") or {}).get("content") or {}
+        total = items_total(content.get("pagingInfo") or {}, 0)
+        if total:
+            playlist["trackCount"] = total
+
+    await asyncio.gather(*(count_one(p) for p in targets))
+
+
+def _extract_track_count(pl: dict, item: dict) -> int:
+    """Total lagu sebuah playlist dari atribut respons libraryV3.
+
+    Spotify menaruh hitungan di beberapa jalur yang berbeda tergantung
+    versi web-playernya, jadi coba beberapa lokasi umum.
+    """
+    candidates = [
+        (pl.get("attributes") or {}).get("totalCount"),
+        (pl.get("attributes") or {}).get("trackCount"),
+        (pl.get("attributes") or {}).get("totalTracks"),
+        (item.get("attributes") or {}).get("totalCount"),
+        (pl.get("stats") or {}).get("totalTracks"),
+    ]
+    for value in candidates:
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, (int, float)):
+            return int(value)
+        if isinstance(value, str) and value.strip().isdigit():
+            return int(value.strip())
+    return 0
+
+
+def items_total(paging_info: dict, fallback: int) -> int:
+    """Total item dari metadata paging respons playlist saat tersedia."""
+    for key in ("total", "totalCount", "totalLength"):
+        value = paging_info.get(key)
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, (int, float)) and value >= 0:
+            return int(value)
+    return fallback
 
 
 async def get_user_liked_tracks(app, sp_dc: str) -> dict:
@@ -273,7 +377,7 @@ async def get_playlist_tracks(app, playlist_id: str, sp_dc: str) -> dict:
     )
     pl = (data.get("data") or {}).get("playlistV2") or {}
     content = pl.get("content") or {}
-    total = content.get("pagingInfo", {}).get("limit", 0)
+    paging_info = content.get("pagingInfo") or {}
     items = []
     for entry in content.get("items", []):
         track = ((entry.get("itemV2") or {}).get("data") or {})
@@ -301,7 +405,8 @@ async def get_playlist_tracks(app, playlist_id: str, sp_dc: str) -> dict:
             "durationMs": dur_ms,
             "explicit": (track.get("contentRating") or {}).get("label") == "EXPLICIT",
         })
-    return {"total": len(items), "items": items}
+    total = items_total(paging_info, len(items))
+    return {"total": total, "items": items}
 
 
 async def get_embed_html(app, track_id: str, sp_dc: str) -> HTMLResponse:
@@ -333,41 +438,7 @@ async def get_embed_html(app, track_id: str, sp_dc: str) -> HTMLResponse:
             "</head>",
             '<style>'
             '[data-testid="embed-widget-container"]{opacity:1 !important}'
-            '[data-testid="embed-widget-skeleton"],'
-            '[data-testid="skeleton"],'
             '</style>'
-            '<script>'
-            '(function(){'
-            'var tries=0,played=false;'
-            'function tryPlay(){'
-            'var a=document.querySelector("audio,video");'
-            'if(a&&!a.paused&&a.currentTime>0){played=true;return}'
-            'if(a&&a.readyState>=2){'
-            '  a.muted=false;'
-            '  var p=a.play();'
-            '  if(p&&p.then)p.then(function(){played=true}).catch(function(){})'
-            '  return'
-            '}'
-            'var btn=document.querySelector("[data-testid=\\"play-pause-button\\"]");'
-            'if(btn&&!btn.disabled){try{btn.click();played=true}catch(e){}}'
-            'if(!played&&tries++<20)setTimeout(tryPlay,300)'
-            '}'
-            'function observe(){'
-            'var obs=new MutationObserver(function(m){'
-            'if(document.querySelector("audio,video")){'
-            '  obs.disconnect();setTimeout(tryPlay,100)'
-            '}'
-            '});'
-            'obs.observe(document.body||document.documentElement,'
-            '{childList:true,subtree:true})}'
-            'if(document.readyState==="loading")'
-            'document.addEventListener("DOMContentLoaded",observe);'
-            'else observe();'
-            'window.addEventListener("message",function(e){'
-            'if(e.data&&e.data.type==="force-play"){tries=0;tryPlay()}'
-            '});'
-            '})();'
-            '</script>'
             '</head>',
             1
         )

@@ -1364,54 +1364,6 @@ body.lyrics-mode #pvLyrics {
   padding-bottom: 45vh
 }
 
-/* ---------- AUTOPLAY FAIL OVERLAY ---------- */
-.autoplay-fail {
-  position: absolute;
-  inset: 0;
-  z-index: 31;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, .45);
-  border-radius: 14px;
-  pointer-events: auto;
-}
-
-.autoplay-fail-btn {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: #1db954;
-  color: #04210e;
-  border: none;
-  border-radius: 28px;
-  padding: 14px 28px;
-  font-size: 15px;
-  font-weight: 800;
-  cursor: pointer;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, .45);
-  transition: background .2s, transform .15s;
-  animation: pulse-glow 1.8s ease-in-out infinite;
-}
-
-.autoplay-fail-btn:hover {
-  background: #22c95f;
-  transform: scale(1.05);
-}
-
-.autoplay-fail-btn:active {
-  transform: scale(.97);
-}
-
-.autoplay-fail-btn i {
-  font-size: 18px;
-}
-
-@keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 8px 28px rgba(29, 185, 84, .3); }
-  50% { box-shadow: 0 8px 28px rgba(29, 185, 84, .6); }
-}
-
 /* ---------- GATE OVERLAY (PLAYER PAGE) ---------- */
 .gate {
   position: fixed;

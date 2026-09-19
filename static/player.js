@@ -11,8 +11,6 @@
     playhead: 0,
     useMsg: false,
     lastMessageAt: 0,
-    autoplayPending: false,
-    autoplayDone: false,
     embedMsg: false,
     isPlaying: false,
     queueAdvancePending: false,
@@ -37,8 +35,6 @@
     gateBack: document.getElementById('gateBack'),
     gateLogin: document.getElementById('gateLogin'),
     gateSpdc: document.getElementById('gateSpdc'),
-    autoplayFail: document.getElementById('autoplayFail'),
-    autoplayFailBtn: document.getElementById('autoplayFailBtn'),
     toast: document.getElementById('toast')
   };
 
@@ -124,8 +120,6 @@
     state.playhead = 0;
     state.useMsg = false;
     state.lastMessageAt = 0;
-    state.autoplayPending = false;
-    state.autoplayDone = false;
     state.embedMsg = false;
     state.queueAdvancePending = false;
     state.autoAdvancing = false;
@@ -148,7 +142,7 @@
     el.spWidget.onload = function () {
       el.pvLoading.style.display = 'none';
       el.embedPanel.style.display = 'block';
-      ensurePlaying(20);
+      autoplay();
       startMonitor();
     };
 
@@ -313,78 +307,56 @@
     try { return el.spWidget.contentDocument || null; } catch (e) { return null; }
   }
 
-  function clickPlayButton(doc) {
-    var sel = [
-      'button[data-testid="play-pause-button"]',
-      'button[data-testid="play-button"]',
-      'button[aria-label="Play"]',
-      'button[aria-label="Putar"]'
-    ];
-    for (var i = 0; i < sel.length; i++) {
-      var b = doc.querySelector(sel[i]);
-      if (b && !b.disabled) {
-        var lb = (b.getAttribute('aria-label') || '').toLowerCase();
-        if (lb.indexOf('pause') === -1 && lb.indexOf('jeda') === -1) {
-          try { b.click(); } catch (e) {}
-          return true;
-        }
-      }
-    }
-    return false;
-  }
+  // Autoplay: coba SEBAGAI kali saja per lagu — satu panggilan media.play() dan
+  // satu klik tombol play. Tidak pernah mengulang aksi, supaya tidak terjadi
+  // play-pause yang berkedip-kedip. Setelah itu tinggal pantau status sampai
+  // benar-benar berjalan atau menyerah.
+  var autoplayActive = false;
+  var autoplaySeq = 0;
+  var autoplayTimer = null;
 
-  function ensurePlaying(rounds) {
-    if (state.autoplayDone || state.autoplayPending || rounds <= 0) {
-      if (!state.autoplayDone && el.autoplayFail) {
-        el.autoplayFail.hidden = false;
+  function autoplay() {
+    if (autoplayActive && autoplaySeq === state.loadSeq) return;
+    if (autoplayTimer) {
+      clearTimeout(autoplayTimer);
+      autoplayTimer = null;
+    }
+    autoplayActive = true;
+    autoplaySeq = state.loadSeq;
+    var tries = 0;
+    var playedOnce = false;
+    var clickedOnce = false;
+    (function tick() {
+      if (!autoplayActive || autoplaySeq !== state.loadSeq) {
+        autoplayActive = false;
+        return;
       }
-      return;
-    }
-    if (el.autoplayFail) el.autoplayFail.hidden = true;
-    var doc = getEmbedDoc();
-    if (!doc) {
-      setTimeout(function () { ensurePlaying(rounds - 1); }, 250);
-      return;
-    }
-    var media = doc.querySelector('audio,video');
-    if (media && !media.paused && media.currentTime > 0) {
-      state.isPlaying = true;
-      state.autoplayDone = true;
-      return;
-    }
-    state.autoplayPending = true;
-    if (media) {
-      try {
-        var playResult = media.play();
-        if (playResult && typeof playResult.then === 'function') {
-          playResult.then(function () {
-            state.isPlaying = true;
-            state.autoplayDone = true;
-            state.autoplayPending = false;
-          }).catch(function () {
-            state.autoplayPending = false;
-            try { el.spWidget.contentWindow.postMessage({ type: 'force-play' }, '*'); } catch (e) {}
-          });
-        } else {
-          state.isPlaying = true;
-          state.autoplayDone = true;
-          state.autoplayPending = false;
-        }
-      } catch (e) { state.autoplayPending = false; }
-    } else {
-      if (clickPlayButton(doc)) {
+      var doc = getEmbedDoc();
+      var media = doc && doc.querySelector('audio,video');
+      if (media && !media.paused && !media.ended) {
+        autoplayActive = false;
         state.isPlaying = true;
-        state.autoplayDone = true;
-      } else {
-        state.autoplayPending = false;
+        return;
       }
-    }
-    if (!state.autoplayDone) {
-      setTimeout(function () {
-        state.autoplayPending = false;
-        ensurePlaying(rounds - 1);
-      }, 250);
-    }
+      if (!playedOnce && media && media.readyState >= 2) {
+        playedOnce = true;
+        try {
+          var pr = media.play();
+          if (pr && typeof pr.catch === 'function') pr.catch(function () {});
+        } catch (e) {}
+      } else if (!clickedOnce) {
+        var btn = doc && doc.querySelector('[data-testid="play-pause-button"]');
+        if (btn && !btn.disabled) {
+          clickedOnce = true;
+          try { btn.click(); } catch (e) {}
+        }
+      }
+      if (++tries < 100) {
+        autoplayTimer = setTimeout(tick, 300);
+      } else {
+        autoplayActive = false;
+      }
+    })();
   }
 
   function renderLyrics() {
@@ -629,20 +601,8 @@
   });
 
   el.embedPanel.addEventListener('click', function () {
-    state.autoplayPending = false;
-    state.autoplayDone = false;
-    ensurePlaying(4);
+    autoplay();
   });
-
-  if (el.autoplayFailBtn) {
-    el.autoplayFailBtn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      state.autoplayPending = false;
-      state.autoplayDone = false;
-      if (el.autoplayFail) el.autoplayFail.hidden = true;
-      ensurePlaying(8);
-    });
-  }
 
 var queueBtn = document.getElementById('queueBtn');
     var queuePanel = document.getElementById('queuePanel');
