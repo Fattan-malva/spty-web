@@ -179,6 +179,7 @@
     if (el.spdcInput) el.spdcInput.value = '';
     closeLoginModal();
     toast('Login berhasil. sp_dc tersimpan di cookie.');
+    if (window.SpotifyQueue) window.SpotifyQueue.refresh();
     loadLibrary();
   }
 
@@ -216,6 +217,7 @@
         syncSpdcUI();
         showView('home');
         toast('sp_dc dihapus');
+        if (window.SpotifyQueue) window.SpotifyQueue.refresh();
         loadLibrary();
       })
       .catch(function () { toast('Gagal logout'); });
