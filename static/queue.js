@@ -79,6 +79,7 @@ window.SpotifyQueue = (function () {
     get: function () { return queue.slice(); },
     refresh: refresh,
     add: function (item) { return post('add', { item: item }); },
+    addMany: function (items) { return post('add', { items: items }); },
     remove: function (index) { return post('remove', { index: index }); },
     shift: function () { return post('shift'); },
     clear: function () { return post('clear'); },

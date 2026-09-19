@@ -40,10 +40,10 @@ def load_queue() -> list[dict[str, Any]]:
 
 def write_queue(items: list[dict[str, Any]]) -> None:
     payload = items[:MAX_ITEMS]
-    tmp = QUEUE_FILE + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
+    with open(QUEUE_FILE, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2, ensure_ascii=False)
-    os.replace(tmp, QUEUE_FILE)
+        f.flush()
+        os.fsync(f.fileno())
 
 
 def _sanitize_item(item: Any) -> Optional[dict[str, str]]:
@@ -60,13 +60,19 @@ def _sanitize_item(item: Any) -> Optional[dict[str, str]]:
     }
 
 
-def _action_add(items: list[dict], item) -> dict:
-    clean = _sanitize_item(item)
-    if not clean:
-        raise HTTPException(status_code=400, detail="Invalid queue item")
-    clean["id"] = uuid.uuid4().hex[:8]
-    items.append(clean)
-    return {"items": items, "ok": True, "duplicate": False}
+def _action_add(items: list[dict], item_or_items) -> dict:
+    batch = item_or_items if isinstance(item_or_items, list) else [item_or_items]
+    added = 0
+    for item in batch:
+        clean = _sanitize_item(item)
+        if not clean:
+            continue
+        clean["id"] = uuid.uuid4().hex[:8]
+        items.append(clean)
+        added += 1
+    if added == 0:
+        raise HTTPException(status_code=400, detail="Invalid queue item(s)")
+    return {"items": items, "ok": True, "added": added}
 
 
 def _action_remove(items: list[dict], index) -> dict:
@@ -91,7 +97,8 @@ def _action_clear(items: list[dict]) -> dict:
 
 def apply_action(items: list[dict[str, Any]], action: str, body: dict) -> dict:
     if action == "add":
-        return _action_add(items, body.get("item"))
+        data = body.get("items") or body.get("item")
+        return _action_add(items, data)
     if action == "remove":
         return _action_remove(items, body.get("index"))
     if action == "shift":

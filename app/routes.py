@@ -3,9 +3,9 @@ import os
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 
-from . import config, queue_store, services, settings, spdc
+from . import config, queue_store, services, spdc
 from .config import MAX_LIMIT
 from .mappers import sanitize_track_id
 
@@ -35,18 +35,33 @@ async def root():
     return FileResponse(os.path.join(config.BASE_DIR, "home.html"), media_type="text/html")
 
 
-@router.get("/settings")
-async def get_settings():
-    return settings.load_settings()
+# ---------- SESSION (per-user sp_dc cookie) ----------
+
+@router.get("/api/session")
+async def get_session(request: Request):
+    sp_dc = request.cookies.get(spdc.SPDC_COOKIE_NAME, "")
+    return {"loggedIn": bool(sp_dc and len(sp_dc) >= 20), "hasSpdc": bool(sp_dc)}
 
 
-@router.put("/settings")
-async def put_settings(request: Request):
+@router.post("/api/session")
+async def post_session(request: Request):
     try:
         body = await request.json()
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON body")
-    return settings.save_settings(body or {})
+    sp_dc = str(body.get("sp_dc") or "").strip()
+    if not sp_dc or len(sp_dc) < 20:
+        raise HTTPException(status_code=400, detail="sp_dc tidak valid")
+    response = JSONResponse({"success": True, "message": "Session tersimpan"})
+    spdc.set_spdc_cookie(response, sp_dc)
+    return response
+
+
+@router.delete("/api/session")
+async def delete_session():
+    response = JSONResponse({"success": True, "message": "Session dihapus"})
+    spdc.clear_spdc_cookie(response)
+    return response
 
 
 def _queue_message(items) -> dict:
@@ -70,6 +85,8 @@ async def post_queue(request: Request):
     response = _queue_message(result["items"])
     if action == "shift" and result.get("shifted") is not None:
         response["shifted"] = result["shifted"]
+    if result.get("added") is not None:
+        response["added"] = result["added"]
     return response
 
 

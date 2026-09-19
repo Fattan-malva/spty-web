@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from . import config
+from .auth_proxy import router as auth_proxy_router
 from .middleware import add_request_logging
 from .routes import router
 
@@ -57,3 +58,4 @@ add_request_logging(app)
 app.mount("/static", StaticFiles(directory=os.path.join(config.BASE_DIR, "static")), name="static")
 
 app.include_router(router)
+app.include_router(auth_proxy_router)

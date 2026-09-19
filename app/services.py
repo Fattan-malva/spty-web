@@ -314,7 +314,7 @@ async def get_embed_html(app, track_id: str, sp_dc: str) -> HTMLResponse:
     if cached:
         config.EMBED_CACHE.pop(cache_key, None)
 
-    target = f"https://open.spotify.com/embed/track/{tid}?utm_source=generator&theme=0"
+    target = f"https://open.spotify.com/embed/track/{tid}?utm_source=generator&theme=0&autoplay=1"
     headers = {"User-Agent": config.UA, "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                "Accept-Language": "en-US,en;q=0.9", "Referer": "https://open.spotify.com/"}
     try:
@@ -335,7 +335,40 @@ async def get_embed_html(app, track_id: str, sp_dc: str) -> HTMLResponse:
             '[data-testid="embed-widget-container"]{opacity:1 !important}'
             '[data-testid="embed-widget-skeleton"],'
             '[data-testid="skeleton"],'
-            '</style></head>',
+            '</style>'
+            '<script>'
+            '(function(){'
+            'var tries=0,played=false;'
+            'function tryPlay(){'
+            'var a=document.querySelector("audio,video");'
+            'if(a&&!a.paused&&a.currentTime>0){played=true;return}'
+            'if(a&&a.readyState>=2){'
+            '  a.muted=false;'
+            '  var p=a.play();'
+            '  if(p&&p.then)p.then(function(){played=true}).catch(function(){})'
+            '  return'
+            '}'
+            'var btn=document.querySelector("[data-testid=\\"play-pause-button\\"]");'
+            'if(btn&&!btn.disabled){try{btn.click();played=true}catch(e){}}'
+            'if(!played&&tries++<20)setTimeout(tryPlay,300)'
+            '}'
+            'function observe(){'
+            'var obs=new MutationObserver(function(m){'
+            'if(document.querySelector("audio,video")){'
+            '  obs.disconnect();setTimeout(tryPlay,100)'
+            '}'
+            '});'
+            'obs.observe(document.body||document.documentElement,'
+            '{childList:true,subtree:true})}'
+            'if(document.readyState==="loading")'
+            'document.addEventListener("DOMContentLoaded",observe);'
+            'else observe();'
+            'window.addEventListener("message",function(e){'
+            'if(e.data&&e.data.type==="force-play"){tries=0;tryPlay()}'
+            '});'
+            '})();'
+            '</script>'
+            '</head>',
             1
         )
 

@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Spotify Player</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-  <link rel="stylesheet" href="/static/app.css">
+  <link rel="stylesheet" href="/static/app.css?v=8">
   <style>
     html.mini-embed,
     html.mini-embed body {
@@ -124,6 +124,12 @@
     </div>
 
     <div class="embed-panel" id="embedPanel">
+      <div class="autoplay-fail" id="autoplayFail" hidden>
+        <button id="autoplayFailBtn" class="autoplay-fail-btn">
+          <i class="fa-solid fa-play"></i>
+          <span>Mulai Putar</span>
+        </button>
+      </div>
       <iframe id="spWidget" allow="autoplay *; encrypted-media; fullscreen; picture-in-picture; web-share"
         allowfullscreen frameborder="0" loading="eager"></iframe>
     </div>
@@ -131,19 +137,20 @@
 
   <div class="gate" id="gate">
     <div class="gate-card">
-      <div class="gicon"><i class="fa-solid fa-headphones"></i></div>
-      <h2>sp_dc Diperlukan</h2>
-      <p>Untuk memutar lagu, atur sp_dc terlebih dahulu lewat ikon pengaturan di halaman pencarian.</p>
-      <button id="gateBack">Kembali ke Pencarian</button>
+      <div class="gicon"><i class="fa-brands fa-spotify"></i></div>
+      <h2>Login Spotify Diperlukan</h2>
+      <p>Untuk memutar lagu, kamu perlu login dengan akun Spotify. Klik tombol di bawah lalu login di popup. sp_dc tersimpan otomatis.</p>
+      <button id="gateLogin" class="gate-login"><i class="fa-brands fa-spotify"></i> Masuk dengan Spotify</button>
+      <button id="gateBack">Kembali ke Beranda</button>
     </div>
   </div>
 
   <div id="toast"></div>
 
   <script src="https://unpkg.com/lucide@latest"></script>
-  <script src="/static/queue.js"></script>
-  <script src="/static/player.js"></script>
-  <script src="/static/player-controls.js"></script>
+  <script src="/static/queue.js?v=8"></script>
+  <script src="/static/player.js?v=9"></script>
+  <script src="/static/player-controls.js?v=8"></script>
 </body>
 
 </html>

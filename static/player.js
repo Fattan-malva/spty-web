@@ -35,11 +35,22 @@
     pvLyrics: document.getElementById('pvLyrics'),
     gate: document.getElementById('gate'),
     gateBack: document.getElementById('gateBack'),
+    gateLogin: document.getElementById('gateLogin'),
+    autoplayFail: document.getElementById('autoplayFail'),
+    autoplayFailBtn: document.getElementById('autoplayFailBtn'),
     toast: document.getElementById('toast')
   };
 
+  function getCookie(name) {
+    var match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+    if (!match) return '';
+    var value = match[1];
+    try { return decodeURIComponent(value); } catch (e) { return value; }
+  }
+
   function credQ() {
-    return state.spDc ? ('&sp_dc=' + encodeURIComponent(state.spDc)) : '';
+    var dc = getCookie('sp_dc');
+    return dc ? ('&sp_dc=' + encodeURIComponent(dc)) : '';
   }
 
   function api(url) {
@@ -68,13 +79,8 @@
   }
 
   function loadSettings() {
-    return fetch('/settings')
-      .then(function (r) { return r.json(); })
-      .then(function (s) {
-        state.spDc = (s && s.sp_dc) || '';
-        return state.spDc;
-      })
-      .catch(function () { return ''; });
+    state.spDc = getCookie('sp_dc');
+    return Promise.resolve(state.spDc);
   }
 
   function showGate() { el.gate.classList.add('open'); }
@@ -141,7 +147,7 @@
     el.spWidget.onload = function () {
       el.pvLoading.style.display = 'none';
       el.embedPanel.style.display = 'block';
-      ensurePlaying(8);
+      ensurePlaying(20);
       startMonitor();
     };
 
@@ -327,7 +333,13 @@
   }
 
   function ensurePlaying(rounds) {
-    if (state.autoplayDone || state.autoplayPending || rounds <= 0) return;
+    if (state.autoplayDone || state.autoplayPending || rounds <= 0) {
+      if (!state.autoplayDone && el.autoplayFail) {
+        el.autoplayFail.hidden = false;
+      }
+      return;
+    }
+    if (el.autoplayFail) el.autoplayFail.hidden = true;
     var doc = getEmbedDoc();
     if (!doc) {
       setTimeout(function () { ensurePlaying(rounds - 1); }, 250);
@@ -348,7 +360,10 @@
             state.isPlaying = true;
             state.autoplayDone = true;
             state.autoplayPending = false;
-          }).catch(function () { state.autoplayPending = false; });
+          }).catch(function () {
+            state.autoplayPending = false;
+            try { el.spWidget.contentWindow.postMessage({ type: 'force-play' }, '*'); } catch (e) {}
+          });
         } else {
           state.isPlaying = true;
           state.autoplayDone = true;
@@ -560,6 +575,38 @@
 
   el.gateBack.addEventListener('click', function () { location.href = '/'; });
 
+  if (el.gateLogin) {
+    el.gateLogin.addEventListener('click', function () {
+      var w = window.open('/auth/login', 'spotify-login', 'width=520,height=760,scrollbars=yes');
+      if (!w) {
+        toast('Popup diblokir. Izinkan popup dari situs ini lalu coba lagi.');
+        return;
+      }
+      var done = false;
+      function finishLogin(dc) {
+        if (done) return;
+        done = true;
+        clearInterval(t);
+        try { if (w && !w.closed) w.close(); } catch (e) {}
+        state.spDc = dc;
+        hideGate();
+        renderQueue();
+        openPlayer(trackId);
+      }
+      var t = setInterval(function () {
+        var dc = getCookie('sp_dc');
+        if (dc && dc.length >= 20) {
+          finishLogin(dc);
+          return;
+        }
+        if (w.closed) {
+          clearInterval(t);
+          if (!done) toast('Belum ada sp_dc di cookie. Coba lagi.');
+        }
+      }, 700);
+    });
+  }
+
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') goBack();
   });
@@ -569,6 +616,16 @@
     state.autoplayDone = false;
     ensurePlaying(4);
   });
+
+  if (el.autoplayFailBtn) {
+    el.autoplayFailBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      state.autoplayPending = false;
+      state.autoplayDone = false;
+      if (el.autoplayFail) el.autoplayFail.hidden = true;
+      ensurePlaying(8);
+    });
+  }
 
 var queueBtn = document.getElementById('queueBtn');
     var queuePanel = document.getElementById('queuePanel');

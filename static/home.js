@@ -11,6 +11,7 @@
     requestId: 0,
     suggestionTimer: null,
     suggestionRequestId: 0,
+    sessionTimer: null,
     playlists: [],
     liked: { total: 0, items: [] },
     currentPlaylist: null
@@ -36,7 +37,7 @@
     playlistGrid: document.getElementById('playlistGrid'),
     libraryList: document.getElementById('libraryList'),
     libraryEmpty: document.getElementById('libraryEmpty'),
-    libraryOpenSettings: document.getElementById('libraryOpenSettings'),
+    libraryLogin: document.getElementById('libraryLogin'),
     libraryReload: document.getElementById('libraryReload'),
     plCover: document.getElementById('plCover'),
     plType: document.getElementById('plType'),
@@ -55,16 +56,23 @@
     queueClear: document.getElementById('queueClear'),
     queueCount: document.getElementById('queueCount'),
     banner: document.getElementById('spdcBanner'),
-    bannerOpen: document.getElementById('bannerOpenSettings'),
-    settingsBtn: document.getElementById('settingsBtn'),
-    settingsPop: document.getElementById('settingsPop'),
-    spdcInput: document.getElementById('spdcInput'),
-    btnSaveSpdc: document.getElementById('btnSaveSpdc'),
-    settingsMsg: document.getElementById('settingsMsg'),
+    bannerLogin: document.getElementById('bannerLogin'),
+    loginBtn: document.getElementById('loginBtn'),
+    loggedUser: document.getElementById('loggedUser'),
+    loginModal: document.getElementById('loginModal'),
+    loginFrame: document.getElementById('loginFrame'),
+    loginClose: document.getElementById('loginClose'),
     toast: document.getElementById('toast')
   };
 
   // ---------- HELPERS ----------
+  function getCookie(name) {
+    var match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+    if (!match) return '';
+    var value = match[1];
+    try { return decodeURIComponent(value); } catch (e) { return value; }
+  }
+
   function toast(msg, ms) {
     el.toast.textContent = msg;
     el.toast.classList.add('show');
@@ -73,7 +81,7 @@
   }
 
   function refreshIcons() {
-    if (window.lucide) window.lucide.createIcons();
+    try { if (window.lucide) window.lucide.createIcons(); } catch (e) {}
   }
 
   function escapeHtml(s) {
@@ -90,7 +98,8 @@
   }
 
   function spdcQuery() {
-    return state.spDc ? '?sp_dc=' + encodeURIComponent(state.spDc) : '';
+    var dc = getCookie('sp_dc');
+    return dc ? '?sp_dc=' + encodeURIComponent(dc) : '';
   }
 
   // ---------- QUEUE ----------
@@ -125,75 +134,88 @@
       toast('Antrean tidak tersedia');
       return Promise.reject();
     }
-    var chain = Promise.resolve();
-    items.forEach(function (item) {
-      chain = chain.then(function () {
-        return queue.add(item).catch(function () {});
+    return queue.addMany(items)
+      .then(function (res) {
+        var added = (res && res.added) || items.length;
+        toast(added + ' lagu ditambahkan ke antrean');
+        return added;
+      })
+      .catch(function () {
+        toast('Gagal menambahkan ke antrean');
+        return Promise.reject();
       });
-    });
-    return chain.then(function () {
-      toast(items.length + ' lagu ditambahkan ke antrean');
-      return items.length;
-    });
   }
 
-  // ---------- SETTINGS ----------
+  // ---------- AUTH ----------
   function loadSettings() {
-    return fetch('/settings')
-      .then(function (r) { return r.json(); })
-      .then(function (s) {
-        state.spDc = (s && s.sp_dc) || '';
-        el.spdcInput.value = state.spDc;
-        syncSpdcUI();
-      })
-      .catch(function () { syncSpdcUI(); });
+    var spDc = getCookie('sp_dc');
+    state.spDc = spDc;
+    syncSpdcUI();
+    return Promise.resolve();
   }
 
   function syncSpdcUI() {
-    el.banner.classList.toggle('show', !state.spDc);
-    el.libraryEmpty.hidden = !!state.spDc;
-    el.homeSubtitle.textContent = state.spDc ? 'Perpustakaan kamu' : 'Atur sp_dc untuk memuat perpustakaan';
+    var logged = !!(state.spDc && state.spDc.length >= 20);
+    if (el.loginBtn) el.loginBtn.hidden = logged;
+    if (el.loggedUser) el.loggedUser.hidden = !logged;
+    if (el.banner) el.banner.classList.toggle('show', !logged);
+    if (el.libraryEmpty) el.libraryEmpty.hidden = logged;
+    if (el.homeSubtitle) el.homeSubtitle.textContent = logged ? 'Perpustakaan kamu' : 'Masuk untuk memuat perpustakaan';
   }
 
-  function openSettings() {
-    el.settingsPop.classList.add('open');
-    el.settingsBtn.classList.add('active');
-    setTimeout(function () { el.spdcInput.focus(); }, 60);
+  function openLoginModal() {
+    el.loginFrame.src = '/auth/login?t=' + Date.now();
+    el.loginModal.hidden = false;
+    document.body.classList.add('modal-open');
+    startSessionPolling();
   }
 
-  function closeSettings() {
-    el.settingsPop.classList.remove('open');
-    el.settingsBtn.classList.remove('active');
+  function closeLoginModal() {
+    el.loginModal.hidden = true;
+    document.body.classList.remove('modal-open');
+    stopSessionPolling();
   }
 
-  function setMsg(text, type) {
-    el.settingsMsg.textContent = text;
-    el.settingsMsg.className = 'pmsg ' + (type || '');
+  function startSessionPolling() {
+    stopSessionPolling();
+    state.sessionTimer = setInterval(function () {
+      fetch('/api/session', { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d && d.loggedIn) onLoggedIn();
+        })
+        .catch(function () {});
+    }, 1200);
   }
 
-  function saveSpdc() {
-    var val = el.spdcInput.value.trim();
-    setMsg('Menyimpan...');
-    return fetch('/settings', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sp_dc: val })
-    })
-      .then(function (r) {
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return r.json();
-      })
-      .then(function (s) {
-        state.spDc = (s && s.sp_dc) || '';
+  function stopSessionPolling() {
+    if (state.sessionTimer) {
+      clearInterval(state.sessionTimer);
+      state.sessionTimer = null;
+    }
+  }
+
+  function onLoggedIn() {
+    var dc = getCookie('sp_dc');
+    if (!dc || dc.length < 20) return;
+    state.spDc = dc;
+    syncSpdcUI();
+    closeLoginModal();
+    toast('Login berhasil. sp_dc tersimpan di cookie.');
+    loadLibrary();
+  }
+
+  function logoutSpdc() {
+    if (!window.confirm('Logout dari akun Spotify ini?')) return;
+    fetch('/api/session', { method: 'DELETE', credentials: 'same-origin' })
+      .then(function () {
+        state.spDc = '';
         syncSpdcUI();
-        setMsg(state.spDc ? 'Tersimpan' : 'Kosong, dihapus dari file', 'ok');
-        setTimeout(function () {
-          closeSettings();
-          toast(state.spDc ? 'sp_dc disimpan' : 'sp_dc dihapus');
-          loadLibrary();
-        }, 600);
+        showView('home');
+        toast('sp_dc dihapus');
+        loadLibrary();
       })
-      .catch(function () { setMsg('Gagal menyimpan', 'err'); });
+      .catch(function () { toast('Gagal logout'); });
   }
 
   // ---------- LIBRARY ----------
@@ -617,6 +639,9 @@
     if (e.data.type === 'queue-updated') {
       renderQueue();
     }
+    if (e.data === 'loginSuccess' || (e.data && e.data.type === 'spdc-saved')) {
+      if (getCookie('sp_dc')) onLoggedIn();
+    }
   });
 
   function updateNowPlaying(playback) {
@@ -631,29 +656,12 @@
     }
   }
 
-  document.addEventListener('click', function (e) {
-    if (el.settingsPop.classList.contains('open')) {
-      if (el.settingsPop.contains(e.target) || e.target === el.settingsBtn) return;
-      closeSettings();
-    }
-  });
-
-  el.settingsBtn.addEventListener('click', function (e) {
-    e.stopPropagation();
-    if (el.settingsPop.classList.contains('open')) {
-      closeSettings();
-    } else {
-      openSettings();
-    }
-  });
-
-  el.bannerOpen.addEventListener('click', function () {
-    openSettings();
-  });
-  el.libraryOpenSettings.addEventListener('click', function () {
-    openSettings();
-  });
-  el.libraryReload.addEventListener('click', function () {
+  if (el.bannerLogin) el.bannerLogin.addEventListener('click', openLoginModal);
+  if (el.loginBtn) el.loginBtn.addEventListener('click', openLoginModal);
+  if (el.libraryLogin) el.libraryLogin.addEventListener('click', openLoginModal);
+  if (el.loginClose) el.loginClose.addEventListener('click', closeLoginModal);
+  if (el.loggedUser) el.loggedUser.addEventListener('click', logoutSpdc);
+  if (el.libraryReload) el.libraryReload.addEventListener('click', function () {
     loadLibrary();
   });
 
@@ -662,12 +670,11 @@
     closeSuggestions();
   });
 
-  el.btnSaveSpdc.addEventListener('click', saveSpdc);
-  el.spdcInput.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter') saveSpdc();
-  });
-
   document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !el.loginModal.hidden) {
+      closeLoginModal();
+      return;
+    }
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
     if (e.key === '/') {
       e.preventDefault();
@@ -683,7 +690,13 @@
     if (state.currentPlaylist) playFirstAndEnqueueRest(state.currentPlaylist.tracks);
   });
   el.plEnqueueAll.addEventListener('click', function () {
-    if (state.currentPlaylist) addItemsToQueue(state.currentPlaylist.tracks).catch(function () {});
+    if (!state.currentPlaylist) return;
+    var tr = state.currentPlaylist.tracks || [];
+    if (!tr.length) {
+      toast(state.spDc ? 'Track playlist belum dimuat. Muat ulang playlist.' : 'Login dulu untuk memuat playlist.');
+      return;
+    }
+    addItemsToQueue(tr).catch(function () {});
   });
 
   window.addEventListener('popstate', function () {
@@ -704,7 +717,7 @@
       fetchSearch();
     }
   }, { root: el.main, rootMargin: '480px 0px' });
-  observer.observe(el.searchSentinel);
+  if (el.searchSentinel) observer.observe(el.searchSentinel);
 
   // ---------- INIT ----------
   refreshIcons();
@@ -717,5 +730,10 @@
   }
   loadSettings().then(function () {
     loadLibrary();
-  });
+    if (new URLSearchParams(location.search).get('login') === '1') {
+      openLoginModal();
+      history.replaceState(null, '', location.pathname);
+    }
+  }).catch(function (e) { console.error('init error', e); });
+  console.log('home.js loaded', { loginBtn: !!el.loginBtn, spDc: !!state.spDc });
 })();

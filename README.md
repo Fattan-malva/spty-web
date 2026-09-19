@@ -2,7 +2,7 @@
 
 Aplikasi web lokal untuk mencari lagu Spotify, memutar embed track, menampilkan lirik tersinkronisasi, dan mengelola antrean lagu. Backend menggunakan FastAPI; frontend menggunakan HTML, CSS, dan JavaScript vanilla.
 
-> **Catatan penting:** aplikasi ini memerlukan nilai cookie `sp_dc` Spotify. Nilai tersebut adalah kredensial sensitif. Jangan commit `sp_dc`, `.env`, atau `settings.json` ke repository dan jangan membagikannya.
+> **Catatan penting:** aplikasi ini memerlukan nilai cookie `sp_dc` Spotify. Nilai tersebut adalah kredensial sensitif dan disimpan hanya di cookie browser masing-masing pengguna. Jangan commit `sp_dc` atau `.env` ke repository dan jangan membagikannya.
 
 ## Fitur
 
@@ -43,9 +43,9 @@ pip install -r requirements.txt
 
 ## Konfigurasi
 
-Cara yang direkomendasikan adalah membuka halaman aplikasi lalu mengisi `sp_dc` melalui menu Settings. Nilai tersebut disimpan ke `settings.json`, yang sudah diabaikan oleh Git.
+Buka halaman aplikasi lalu klik **Masuk dengan Spotify**. Halaman login resmi Spotify ditampilkan penuh di dalam modal. Setelah login berhasil, cookie `sp_dc` diambil otomatis, disimpan di cookie browser (30 hari), dan modal tertutup sendiri. Tidak ada lagi input `sp_dc` manual maupun file `settings.json` — kredensial tersimpan per pengguna di browser.
 
-Untuk request API, `sp_dc` juga dapat dikirim melalui query parameter `sp_dc`, cookie `sp_dc`, atau header `x-sp-dc`. Aplikasi memuat file `.env` untuk konfigurasi proses. Variabel runtime yang tersedia:
+Untuk request API, `sp_dc` dapat dikirim melalui query parameter `sp_dc`, cookie `sp_dc`, atau header `x-sp-dc`. Aplikasi memuat file `.env` untuk konfigurasi proses. Variabel runtime yang tersedia:
 
 | Variable | Default | Keterangan |
 | --- | ---: | --- |
@@ -92,8 +92,9 @@ Gunakan satu worker karena cache aplikasi dikelola dalam lifecycle proses.
 | `GET` | `/track?trackId=...` | Metadata track |
 | `GET` | `/lyrics?trackId=...` | Lirik track |
 | `GET` | `/embed-proxy?trackId=...` | Embed player melalui proxy |
-| `GET` | `/settings` | Membaca konfigurasi lokal |
-| `PUT` | `/settings` | Menyimpan `sp_dc` |
+| `GET` | `/auth/login` | Proxy halaman login resmi Spotify (same-origin) |
+| `GET` | `/api/session` | Status sesi `sp_dc` di cookie |
+| `DELETE` | `/api/session` | Logout dan hapus cookie `sp_dc` |
 | `GET` | `/health` | Status service dan concurrency |
 | `DELETE` | `/cache` | Menghapus seluruh cache |
 
@@ -105,18 +106,20 @@ Endpoint track, lyrics, dan embed menerima query `sp_dc` opsional untuk mode kre
 .
 ├── app/
 │   ├── application.py  # Factory FastAPI dan lifecycle
+│   ├── auth_proxy.py   # Proxy login resmi Spotify (same-origin) + relay cookie
 │   ├── config.py       # Konfigurasi, timeout, dan cache
 │   ├── routes.py       # HTTP routes
 │   ├── services.py     # Orkestrasi pencarian, metadata, lirik, dan embed
-│   ├── spotify.py      # Integrasi request Spotify dan TOTP token
-│   └── settings.py     # Penyimpanan settings lokal
+│   ├── spdc.py         # Helper cookie sp_dc per pengguna
+│   └── spotify.py      # Integrasi request Spotify dan TOTP token
 ├── static/
 │   ├── app.css
-│   ├── player.js
-│   └── search.js
+│   ├── home.css
+│   ├── home.js
+│   └── player.js
 ├── main.py             # Entry point aplikasi
+├── home.html
 ├── player.html
-├── search.html
 ├── requirements.txt
 └── .gitignore
 ```
@@ -134,6 +137,7 @@ Untuk menghentikan server, tekan `Ctrl+C` pada terminal yang menjalankannya.
 ## Keamanan dan batasan
 
 - `sp_dc` harus diperlakukan seperti password dan segera dicabut atau diganti jika bocor.
-- Aplikasi ini ditujukan untuk penggunaan lokal atau jaringan tepercaya. Sebelum dipublikasikan, tambahkan autentikasi, batasi CORS, gunakan HTTPS, dan lindungi endpoint settings serta cache.
+- Aplikasi ini ditujukan untuk penggunaan lokal atau jaringan tepercaya. Sebelum dipublikasikan, tambahkan autentikasi, batasi CORS, gunakan HTTPS, dan lindungi endpoint cache.
+- Proxy login meneruskan halaman resmi Spotify apa adanya. Login email/username + password otomatis menangkap `sp_dc`; login lewat Google/Facebook/Apple mengandalkan cookie pihak ketiga sehingga bisa diblokir browser.
 - Integrasi Spotify bergantung pada endpoint dan perilaku embed yang dapat berubah sewaktu-waktu.
 - Pastikan penggunaan aplikasi mematuhi Terms of Use Spotify dan hak akses akun yang digunakan.
