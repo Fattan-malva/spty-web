@@ -183,12 +183,26 @@
     loadLibrary();
   }
 
+  // Fallback klien: sebagian browser (Safari/iOS) menolak Set-Cookie dari
+  // respons server di HTTP lokal. Simpan langsung via document.cookie dengan
+  // atribut yang sama agar sp_dc tetap tersimpan.
+  function setSpdcCookie(spDc) {
+    var expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toUTCString();
+    document.cookie =
+      'sp_dc=' + encodeURIComponent(spDc) +
+      '; expires=' + expires +
+      '; path=/' +
+      '; SameSite=Lax' +
+      (location.protocol === 'https:' ? '; Secure' : '');
+  }
+
   function submitSpdc() {
     var spDc = el.spdcInput.value.trim();
     if (spDc.length < 20) {
       toast('sp_dc tidak valid (minimal 20 karakter)', 3200);
       return;
     }
+    setSpdcCookie(spDc);
     if (el.spdcSave) el.spdcSave.disabled = true;
     fetch('/api/session', {
       method: 'POST',
@@ -211,6 +225,7 @@
 
   function logoutSpdc() {
     if (!window.confirm('Logout dari akun Spotify ini?')) return;
+    document.cookie = 'sp_dc=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax';
     fetch('/api/session', { method: 'DELETE', credentials: 'same-origin' })
       .then(function () {
         state.spDc = '';

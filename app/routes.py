@@ -52,8 +52,10 @@ async def post_session(request: Request):
     sp_dc = str(body.get("sp_dc") or "").strip()
     if not sp_dc or len(sp_dc) < 20:
         raise HTTPException(status_code=400, detail="sp_dc tidak valid")
+    proto = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip().lower()
+    secure = proto == "https" or request.url.scheme == "https"
     response = JSONResponse({"success": True, "message": "Session tersimpan"})
-    spdc.set_spdc_cookie(response, sp_dc)
+    spdc.set_spdc_cookie(response, sp_dc, secure=secure)
     return response
 
 

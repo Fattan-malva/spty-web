@@ -577,12 +577,25 @@
   el.gateBack.addEventListener('click', function () { location.href = '/'; });
 
   if (el.gateLogin) {
+    // Fallback klien: browser tertentu (Safari/iOS) menolak Set-Cookie dari
+    // respons server di HTTP lokal, jadi simpan juga via document.cookie.
+    function setSpdcCookie(dc) {
+      var expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toUTCString();
+      document.cookie =
+        'sp_dc=' + encodeURIComponent(dc) +
+        '; expires=' + expires +
+        '; path=/' +
+        '; SameSite=Lax' +
+        (location.protocol === 'https:' ? '; Secure' : '');
+    }
+
     function submitSpdc() {
       var dc = el.gateSpdc.value.trim();
       if (dc.length < 20) {
         toast('sp_dc tidak valid (minimal 20 karakter)', 3200);
         return;
       }
+      setSpdcCookie(dc);
       el.gateLogin.disabled = true;
       fetch('/api/session', {
         method: 'POST',

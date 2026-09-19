@@ -46,7 +46,7 @@ def require_sp_dc(request: Request, sp_dc_q: Optional[str]) -> str | HTMLRespons
     return sp_dc
 
 
-def set_spdc_cookie(response: Response, sp_dc: str) -> None:
+def set_spdc_cookie(response: Response, sp_dc: str, secure: bool = False) -> None:
     response.set_cookie(
         key=SPDC_COOKIE_NAME,
         value=sp_dc,
@@ -54,6 +54,7 @@ def set_spdc_cookie(response: Response, sp_dc: str) -> None:
         path="/",
         samesite="lax",
         httponly=False,
+        secure=secure,
     )
 
 
