@@ -10,6 +10,7 @@ the cookies Spotify sets along the way are relayed back to the browser.
 import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import Response
+from urllib.parse import urlparse
 
 from .config import UA
 from .spdc import SPDC_COOKIE_NAME
@@ -147,6 +148,22 @@ def _relay(upstream: httpx.Response, request: Request) -> Response:
         if key.lower() in _SKIP_RESPONSE_HEADERS:
             continue
         response.headers[key] = value
+    # Keep the browser on our own origin: absolute redirects to any Spotify
+    # host are rewritten to the same-origin proxy path, otherwise the user's
+    # browser (or network) may block/directly refuse accounts.spotify.com.
+    location = upstream.headers.get("location")
+    if location:
+        parsed = urlparse(location)
+        if parsed.netloc.lower() in (
+            "accounts.spotify.com",
+            "open.spotify.com",
+            "accounts.scdn.co",
+            "www.spotify.com",
+        ):
+            new_path = parsed.path
+            if parsed.query:
+                new_path = f"{new_path}?{parsed.query}"
+            response.headers["location"] = f"/auth{new_path}"
     for cookie in upstream.headers.get_list("set-cookie"):
         response.headers.append("set-cookie", _transform_set_cookie(cookie, secure))
     return response
@@ -172,6 +189,26 @@ async def _forward(request: Request, upstream_path: str) -> Response:
 @router.get("/auth/login")
 async def login_page(request: Request) -> Response:
     return await _forward(request, LOGIN_PATH)
+
+
+# Catch-all for rewritten same-origin redirects (see _relay): the leading
+# "auth" segment is our own prefix, so forward only the upstream path.
+async def auth_proxy_root(request: Request) -> Response:
+    return await _forward(request, "")
+
+
+async def auth_proxy_rest(request: Request, rest: str) -> Response:
+    return await _forward(request, rest)
+
+
+@router.api_route("/auth", methods=_METHODS, include_in_schema=False)
+async def auth_root(request: Request) -> Response:
+    return await auth_proxy_root(request)
+
+
+@router.api_route("/auth/{rest:path}", methods=_METHODS, include_in_schema=False)
+async def auth_rest(request: Request, rest: str) -> Response:
+    return await auth_proxy_rest(request, rest)
 
 
 def _register_prefix(prefix: str) -> None:
