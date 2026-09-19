@@ -315,7 +315,13 @@
   var autoplaySeq = 0;
   var autoplayTimer = null;
 
+  function requiresPlaybackGesture() {
+    return /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  }
+
   function autoplay() {
+    if (requiresPlaybackGesture()) return;
     if (autoplayActive && autoplaySeq === state.loadSeq) return;
     if (autoplayTimer) {
       clearTimeout(autoplayTimer);
