@@ -284,7 +284,7 @@ async def _fill_playlist_counts(app, sp_dc: str, playlists: list) -> None:
         except Exception:
             return
         content = ((data.get("data") or {}).get("playlistV2") or {}).get("content") or {}
-        total = items_total(content.get("pagingInfo") or {}, 0)
+        total = items_total(content.get("pagingInfo") or {}, len(content.get("items") or []))
         if total:
             playlist["trackCount"] = total
 
@@ -321,7 +321,7 @@ def items_total(paging_info: dict, fallback: int) -> int:
         if isinstance(value, bool):
             continue
         if isinstance(value, (int, float)) and value >= 0:
-            return int(value)
+            return max(int(value), fallback)
     return fallback
 
 
