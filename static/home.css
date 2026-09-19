@@ -60,6 +60,14 @@ body {
 @media (max-width: 640px) {
   .app-grid { grid-template-columns: 1fr; grid-template-rows: auto 1fr auto; }
   .left-sidebar { display: none !important; }
+  #loginBtn {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  #loginBtn .login-btn-label { display: none; }
 }
 
 .line-clamp-2 {
