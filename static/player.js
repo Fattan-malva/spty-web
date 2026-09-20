@@ -38,15 +38,43 @@
     toast: document.getElementById('toast')
   };
 
+  var SPDC_KEY = 'spotifySpdc';
+
   function getCookie(name) {
     var match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
     if (!match) return '';
     var value = match[1];
+    if (value.charAt(0) === '"' && value.charAt(value.length - 1) === '"') {
+      value = value.slice(1, -1);
+    }
     try { return decodeURIComponent(value); } catch (e) { return value; }
   }
 
-  function credQ() {
+  function readStoredSpdc() {
     var dc = getCookie('sp_dc');
+    if (dc && dc.length >= 20) return dc;
+    try { dc = localStorage.getItem(SPDC_KEY) || ''; } catch (e) { dc = ''; }
+    return dc && dc.length >= 20 ? dc : '';
+  }
+
+  function saveStoredSpdc(dc) {
+    var expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toUTCString();
+    document.cookie =
+      'sp_dc=' + encodeURIComponent(dc) +
+      '; expires=' + expires +
+      '; path=/' +
+      '; SameSite=Lax' +
+      (location.protocol === 'https:' ? '; Secure' : '');
+    try { localStorage.setItem(SPDC_KEY, dc); } catch (e) {}
+  }
+
+  function clearStoredSpdc() {
+    document.cookie = 'sp_dc=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax';
+    try { localStorage.removeItem(SPDC_KEY); } catch (e) {}
+  }
+
+  function credQ() {
+    var dc = readStoredSpdc();
     return dc ? ('&sp_dc=' + encodeURIComponent(dc)) : '';
   }
 
@@ -76,7 +104,7 @@
   }
 
   function loadSettings() {
-    state.spDc = getCookie('sp_dc');
+    state.spDc = readStoredSpdc();
     return Promise.resolve(state.spDc);
   }
 
@@ -556,24 +584,15 @@
 
   if (el.gateLogin) {
     // Fallback klien: browser tertentu (Safari/iOS) menolak Set-Cookie dari
-    // respons server di HTTP lokal, jadi simpan juga via document.cookie.
-    function setSpdcCookie(dc) {
-      var expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toUTCString();
-      document.cookie =
-        'sp_dc=' + encodeURIComponent(dc) +
-        '; expires=' + expires +
-        '; path=/' +
-        '; SameSite=Lax' +
-        (location.protocol === 'https:' ? '; Secure' : '');
-    }
-
+    // respons server di HTTP lokal, jadi simpan juga via document.cookie
+    // dan mirror localStorage agar sp_dc selalu ada di setiap pemutaran.
     function submitSpdc() {
       var dc = el.gateSpdc.value.trim();
       if (dc.length < 20) {
         toast('sp_dc tidak valid (minimal 20 karakter)', 3200);
         return;
       }
-      setSpdcCookie(dc);
+      saveStoredSpdc(dc);
       el.gateLogin.disabled = true;
       fetch('/api/session', {
         method: 'POST',

@@ -1,0 +1,21 @@
+# JANGAN deklarasikan network di sini: podman 3.4 meng-ignore flag
+# `--network=<name>:alias=...` yang dibuat podman-compose sehingga container
+# gagal menempel di app-network. Hubungkan manual via
+# `podman network connect app-network spty-web` setelah `up`.
+
+services:
+  spty-web:
+    build: .
+    container_name: spty-web
+    restart: unless-stopped
+
+    expose:
+      - "1404"
+
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
+        reservations:
+          memory: 256M

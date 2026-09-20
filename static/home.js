@@ -70,7 +70,35 @@
     var match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
     if (!match) return '';
     var value = match[1];
+    if (value.charAt(0) === '"' && value.charAt(value.length - 1) === '"') {
+      value = value.slice(1, -1);
+    }
     try { return decodeURIComponent(value); } catch (e) { return value; }
+  }
+
+  // Mirror sp_dc ke localStorage supaya selalu tersedia untuk tiap request
+  // (embed/playlist/lirik/antrean) walau cookie tertolak oleh Safari/iOS.
+  function readStoredSpdc() {
+    var dc = getCookie('sp_dc');
+    if (dc && dc.length >= 20) return dc;
+    try { dc = localStorage.getItem('spotifySpdc') || ''; } catch (e) { dc = ''; }
+    return dc && dc.length >= 20 ? dc : '';
+  }
+
+  function saveStoredSpdc(spDc) {
+    var expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toUTCString();
+    document.cookie =
+      'sp_dc=' + encodeURIComponent(spDc) +
+      '; expires=' + expires +
+      '; path=/' +
+      '; SameSite=Lax' +
+      (location.protocol === 'https:' ? '; Secure' : '');
+    try { localStorage.setItem('spotifySpdc', spDc); } catch (e) {}
+  }
+
+  function clearStoredSpdc() {
+    document.cookie = 'sp_dc=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax';
+    try { localStorage.removeItem('spotifySpdc'); } catch (e) {}
   }
 
   function toast(msg, ms) {
@@ -106,7 +134,7 @@
   }
 
   function spdcQuery() {
-    var dc = getCookie('sp_dc');
+    var dc = readStoredSpdc();
     return dc ? '?sp_dc=' + encodeURIComponent(dc) : '';
   }
 
@@ -156,7 +184,7 @@
 
   // ---------- AUTH ----------
   function loadSettings() {
-    var spDc = getCookie('sp_dc');
+    var spDc = readStoredSpdc();
     state.spDc = spDc;
     syncSpdcUI();
     return Promise.resolve();
@@ -192,25 +220,15 @@
   }
 
   // Fallback klien: sebagian browser (Safari/iOS) menolak Set-Cookie dari
-  // respons server di HTTP lokal. Simpan langsung via document.cookie dengan
-  // atribut yang sama agar sp_dc tetap tersimpan.
-  function setSpdcCookie(spDc) {
-    var expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toUTCString();
-    document.cookie =
-      'sp_dc=' + encodeURIComponent(spDc) +
-      '; expires=' + expires +
-      '; path=/' +
-      '; SameSite=Lax' +
-      (location.protocol === 'https:' ? '; Secure' : '');
-  }
-
+  // respons server di HTTP lokal. Simpan langsung via document.cookie dan
+  // mirror localStorage (saveStoredSpdc) agar sp_dc selalu tersedia.
   function submitSpdc() {
     var spDc = el.spdcInput.value.trim();
     if (spDc.length < 20) {
       toast('sp_dc tidak valid (minimal 20 karakter)', 3200);
       return;
     }
-    setSpdcCookie(spDc);
+    saveStoredSpdc(spDc);
     if (el.spdcSave) el.spdcSave.disabled = true;
     fetch('/api/session', {
       method: 'POST',
@@ -233,7 +251,7 @@
 
   function logoutSpdc() {
     if (!window.confirm('Logout dari akun Spotify ini?')) return;
-    document.cookie = 'sp_dc=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax';
+    clearStoredSpdc();
     fetch('/api/session', { method: 'DELETE', credentials: 'same-origin' })
       .then(function () {
         state.spDc = '';

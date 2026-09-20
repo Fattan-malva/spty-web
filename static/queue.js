@@ -13,14 +13,24 @@ window.SpotifyQueue = (function () {
     var match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
     if (!match) return '';
     var value = match[1];
+    if (value.charAt(0) === '"' && value.charAt(value.length - 1) === '"') {
+      value = value.slice(1, -1);
+    }
     try { return decodeURIComponent(value); } catch (e) { return value; }
+  }
+
+  function readStoredSpdc() {
+    var dc = getCookie('sp_dc');
+    if (dc && dc.length >= 20) return dc;
+    try { dc = localStorage.getItem('spotifySpdc') || ''; } catch (e) { dc = ''; }
+    return dc && dc.length >= 20 ? dc : '';
   }
 
   // Key antrean diturunkan dari sp_dc yang sedang login, jadi tiap akun
   // mendapat antrean sendiri. Pengunjung tanpa login memakai key "default".
   function userKey() {
-    var dc = getCookie('sp_dc');
-    return STORAGE_PREFIX + (dc && dc.length >= 20 ? dc : 'default');
+    var dc = readStoredSpdc();
+    return STORAGE_PREFIX + (dc ? dc : 'default');
   }
 
   function parseItems(raw) {

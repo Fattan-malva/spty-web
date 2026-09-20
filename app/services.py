@@ -234,8 +234,14 @@ async def _user_playlists_graphql(app, sp_dc: str) -> dict:
         {"limit": 50, "offset": 0},
         sp_dc=sp_dc,
     )
-    lib = (data.get("data") or {}).get("me", {}).get("libraryV3", {})
-    items = lib.get("items", [])
+    data_body = data.get("data") or {}
+    lib = data_body.get("me") or {}
+    if not isinstance(lib, dict):
+        lib = {}
+    lib = lib.get("libraryV3") or {}
+    if not isinstance(lib, dict):
+        lib = {}
+    items = lib.get("items") or []
     playlists = []
     for entry in items:
         item = (entry.get("item") or {})
@@ -247,9 +253,16 @@ async def _user_playlists_graphql(app, sp_dc: str) -> dict:
         if not pl_id:
             continue
         images = pl.get("images") or {}
+        if not isinstance(images, dict):
+            images = {}
         sources = (images.get("items") or [{}])[0].get("sources") or []
-        cover = sources[0].get("url") if sources else None
-        owner = (pl.get("ownerV2") or {}).get("data") or {}
+        cover = sources[0].get("url") if sources and isinstance(sources[0], dict) else None
+        owner = pl.get("ownerV2") or {}
+        if not isinstance(owner, dict):
+            owner = {}
+        owner = owner.get("data") or {}
+        if not isinstance(owner, dict):
+            owner = {}
         playlists.append({
             "id": pl_id,
             "name": pl.get("name", ""),
@@ -295,14 +308,20 @@ def _extract_track_count(pl: dict, item: dict) -> int:
     """Total lagu sebuah playlist dari atribut respons libraryV3.
 
     Spotify menaruh hitungan di beberapa jalur yang berbeda tergantung
-    versi web-playernya, jadi coba beberapa lokasi umum.
+    versi web-playernya, jadi coba beberapa lokasi umum. Untuk sebagian
+    akun, \"attributes\" dan \"stats\" berupa list, jadi cegah crash
+    dengan hanya membaca nilai dari dict.
     """
+    def _as_dict(value):
+        return value if isinstance(value, dict) else {}
+
     candidates = [
-        (pl.get("attributes") or {}).get("totalCount"),
-        (pl.get("attributes") or {}).get("trackCount"),
-        (pl.get("attributes") or {}).get("totalTracks"),
-        (item.get("attributes") or {}).get("totalCount"),
-        (pl.get("stats") or {}).get("totalTracks"),
+        _as_dict(pl.get("attributes")).get("totalCount"),
+        _as_dict(pl.get("attributes")).get("trackCount"),
+        _as_dict(pl.get("attributes")).get("totalTracks"),
+        _as_dict(item.get("attributes")).get("totalCount"),
+        _as_dict(pl.get("stats")).get("totalTracks"),
+        _as_dict(pl.get("stats")).get("totalCount"),
     ]
     for value in candidates:
         if isinstance(value, bool):
@@ -314,8 +333,10 @@ def _extract_track_count(pl: dict, item: dict) -> int:
     return 0
 
 
-def items_total(paging_info: dict, fallback: int) -> int:
+def items_total(paging_info, fallback: int) -> int:
     """Total item dari metadata paging respons playlist saat tersedia."""
+    if not isinstance(paging_info, dict):
+        return fallback
     for key in ("total", "totalCount", "totalLength"):
         value = paging_info.get(key)
         if isinstance(value, bool):
@@ -332,12 +353,27 @@ async def get_user_liked_tracks(app, sp_dc: str) -> dict:
         {"offset": 0, "limit": 50},
         sp_dc=sp_dc,
     )
-    lib = (data.get("data") or {}).get("me", {}).get("library", {}).get("tracks", {})
-    total = lib.get("totalCount", 0)
+    data_body = data.get("data") or {}
+    me = data_body.get("me") or {}
+    if not isinstance(me, dict):
+        me = {}
+    lib = me.get("library") or {}
+    if not isinstance(lib, dict):
+        lib = {}
+    tracks = lib.get("tracks") or {}
+    if not isinstance(tracks, dict):
+        tracks = {}
+    total = tracks.get("totalCount", 0)
     items = []
-    for entry in lib.get("items", []):
+    for entry in tracks.get("items", []):
+        if not isinstance(entry, dict):
+            continue
         wrapper = entry.get("track") or {}
+        if not isinstance(wrapper, dict):
+            wrapper = {}
         track = wrapper.get("data") or {}
+        if not isinstance(track, dict):
+            track = {}
         if not track.get("name"):
             continue
         track_id = track.get("id") or ""
@@ -346,22 +382,42 @@ async def get_user_liked_tracks(app, sp_dc: str) -> dict:
             track_id = uri.split(":")[-1] if ":" in uri else ""
         if not track_id:
             continue
-        artists = [a.get("profile", {}).get("name", "")
-                   for a in (track.get("artists") or {}).get("items", [])
-                   if isinstance(a, dict)]
+        artists_each = []
+        artists_box = track.get("artists") or {}
+        if not isinstance(artists_box, dict):
+            artists_box = {}
+        for a in artists_box.get("items", []):
+            if isinstance(a, dict):
+                profile = a.get("profile") or {}
+                if not isinstance(profile, dict):
+                    profile = {}
+                artists_each.append(profile.get("name", ""))
         album = track.get("albumOfTrack") or {}
-        sources = (album.get("coverArt") or {}).get("sources") or []
+        if not isinstance(album, dict):
+            album = {}
+        coverArt = album.get("coverArt") or {}
+        if not isinstance(coverArt, dict):
+            coverArt = {}
+        sources = coverArt.get("sources") or []
         cover = max(sources, key=lambda s: s.get("width") or 0).get("url") if sources else None
-        dur_ms = (track.get("trackDuration") or {}).get("totalMilliseconds") \
-                 or (track.get("duration") or {}).get("totalMilliseconds") or 0
+        dur1 = track.get("trackDuration") or {}
+        if not isinstance(dur1, dict):
+            dur1 = {}
+        dur2 = track.get("duration") or {}
+        if not isinstance(dur2, dict):
+            dur2 = {}
+        dur_ms = dur1.get("totalMilliseconds") or dur2.get("totalMilliseconds") or 0
+        cr = track.get("contentRating") or {}
+        if not isinstance(cr, dict):
+            cr = {}
         items.append({
             "trackId": track_id,
             "title": track.get("name", ""),
-            "artist": ", ".join(artists),
+            "artist": ", ".join(artists_each),
             "thumbnail": cover,
             "duration": format_duration(dur_ms),
             "durationMs": dur_ms,
-            "explicit": (track.get("contentRating") or {}).get("label") == "EXPLICIT",
+            "explicit": cr.get("label") == "EXPLICIT",
         })
     return {"total": total, "items": items}
 
