@@ -1,25 +1,52 @@
 /*
  * Mini player isolation layer.
- * app.css has generic .mini-player / .mini-player button rules, so this
- * component intentionally resets its own layout and keeps the controls in a
- * dedicated header row instead of drawing them over the embedded player.
+ *
+ * Di menu home mini player ini HANYA iframe embed Spotify apa adanya: tidak
+ * ada bar judul, tidak ada tombol ▶, tidak ada tombol tutup, tidak ada tombol
+ * lirik. Kontrol putar/jeda, progress bar, judul, dan artis semuanya datang
+ * dari embed aslinya.
+ *
+ * Tinggi iframe memakai layout "short" resmi Spotify. Dari CSS widget embed:
+ *   .TrackWidget_widgetContainer { height: 352px }
+ *   @media(max-height:351px) { height: 232px }
+ *   @media(max-height:231px) { height: 152px }
+ *   @media(max-height:151px) { height: 80px }   <-- layout pendek: satu baris
+ *
+ * Di 80px embed mengubah itself menjadi bar ringkas: cover 64px, judul +
+ * artis sebaris, progress bar, tombol play/jeda 32px, tombol skip, logo
+ * Spotify. Jadi controlsnya tetap kontrol asli Spotify, cuma versi pendek.
+ *
+ * Mini player menempel flush di dasar layar (bottom: 0, tanpa margin, tanpa
+ * border-radius) sehingga tidak ada ruang kosong di bawah iframe. Ruang untuk
+ * konten home disediakan lewat `html.has-mini-player`.
+ *
+ * Di tampilan lirik juga tidak ada tombol apa pun: halaman lirik sudah punya
+ * tombol kembali sendiri di bagian atasnya, dan itulah yang menutup tampilan
+ * ini.
  */
-.mini-player {
+.mini-player:not(.expanded) {
   position: fixed !important;
+  top: auto !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  left: 0 !important;
   z-index: 120 !important;
-  height: 132px !important;
-  min-height: 132px !important;
-  max-height: 132px !important;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  height: 80px !important;
+  min-height: 80px !important;
+  max-height: 80px !important;
   margin: 0 !important;
   padding: 0 !important;
   overflow: hidden !important;
   display: block !important;
-  border: 1px solid rgba(255, 255, 255, .10) !important;
-  border-radius: 14px !important;
-  background: #181818 !important;
-  box-shadow: 0 18px 46px rgba(0, 0, 0, .56) !important;
-  backdrop-filter: blur(16px) !important;
-  -webkit-backdrop-filter: blur(16px) !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: #000000 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
   isolation: isolate !important;
 }
 
@@ -27,76 +54,16 @@
   display: none !important;
 }
 
-.mini-player > .mini-artwork,
-.mini-player > .mini-copy {
-  display: none !important;
-}
-
-.mini-player > #miniLyrics,
-.mini-player > #miniClose {
-  all: unset !important;
-  position: absolute !important;
-  top: 3px !important;
-  z-index: 10 !important;
-  width: 28px !important;
-  height: 28px !important;
-  min-width: 28px !important;
-  min-height: 28px !important;
-  max-width: 28px !important;
-  max-height: 28px !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  box-sizing: border-box !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  border: 1px solid rgba(255, 255, 255, .10) !important;
-  border-radius: 50% !important;
-  background: rgba(255, 255, 255, .075) !important;
-  color: rgba(255, 255, 255, .90) !important;
-  cursor: pointer !important;
-  line-height: 1 !important;
-  font-size: 0 !important;
-  opacity: 1 !important;
-  transform: none !important;
-  box-shadow: none !important;
-  backdrop-filter: blur(10px) !important;
-  -webkit-backdrop-filter: blur(10px) !important;
-  -webkit-backdrop-filter: blur(10px) !important;
-}
-
-.mini-player > #miniLyrics { right: 42px !important; }
-.mini-player > #miniClose { right: 8px !important; }
-
-.mini-player > #miniLyrics:hover,
-.mini-player > #miniClose:hover {
-  background: rgba(255, 255, 255, .14) !important;
-}
-
-.mini-player > #miniLyrics:active,
-.mini-player > #miniClose:active {
-  transform: scale(.94) !important;
-}
-
-.mini-player > #miniLyrics svg,
-.mini-player > #miniClose svg {
-  width: 17px !important;
-  height: 17px !important;
-  min-width: 17px !important;
-  min-height: 17px !important;
-  margin: 0 !important;
-  pointer-events: none !important;
-  stroke-width: 2 !important;
-}
-
+/* Iframe embed mengisi 100% mini player: tidak ada bar di atasnya dan tidak
+   ada ruang di bawahnya. */
 .mini-player > #miniFrame {
   position: absolute !important;
-  top: 34px !important;
+  top: 0 !important;
   right: 0 !important;
   bottom: 0 !important;
   left: 0 !important;
   width: 100% !important;
-  height: calc(100% - 34px) !important;
+  height: 100% !important;
   min-width: 0 !important;
   min-height: 0 !important;
   max-width: none !important;
@@ -106,13 +73,16 @@
   display: block !important;
   border: 0 !important;
   border-radius: 0 !important;
-  background: #181818 !important;
+  background: #000000 !important;
 }
 
+/* ---------- Tampilan lirik (layar penuh) ---------- */
 .mini-player.expanded {
   inset: 0 !important;
+  top: 0 !important;
   right: 0 !important;
   bottom: 0 !important;
+  left: 0 !important;
   width: 100vw !important;
   max-width: none !important;
   height: 100dvh !important;
@@ -126,35 +96,338 @@
   -webkit-backdrop-filter: none !important;
 }
 
-.mini-player.expanded > #miniLyrics,
-.mini-player.expanded > #miniClose {
-  display: none !important;
-}
-
 .mini-player.expanded > #miniFrame {
   top: 0 !important;
   height: 100% !important;
   border-radius: 0 !important;
 }
 
+/* Konten home diberi ruang untuk bar mini player flush di bawah. */
+html.has-mini-player .app-grid {
+  padding-bottom: 88px !important;
+}
+
+/* Toast juga harus naik, kalau tidak ia tenggelam di balik bar player. */
+html.has-mini-player #toast {
+  bottom: 96px !important;
+}
+
+/* ---------- Floating Queue Button (Liquid Glass) ----------
+   Mengambang di atas iframe mini player, di pojok kanan atas iframe.
+   Efek kacausing: backdrop-filter blur + saturate, border tipis semi-transparan,
+   dan highlight radial subtle untuk kesan kaca. */
+#floatQueueBtn {
+  position: fixed;
+  bottom: 100px;
+  right: 16px;
+  z-index: 121;
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(255, 255, 255, .18);
+  border-radius: 50%;
+  background: rgba(18, 18, 18, .55);
+  color: rgba(255, 255, 255, .9);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(18px) saturate(180%);
+  -webkit-backdrop-filter: blur(18px) saturate(180%);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, .4),
+    inset 0 1px 0 rgba(255, 255, 255, .15);
+  transition: background .15s, transform .15s, box-shadow .15s;
+  -webkit-tap-highlight-color: transparent;
+}
+#floatQueueBtn:hover {
+  background: rgba(30, 30, 30, .7);
+  box-shadow:
+    0 6px 20px rgba(0, 0, 0, .5),
+    inset 0 1px 0 rgba(255, 255, 255, .2);
+}
+#floatQueueBtn:active {
+  transform: scale(.94);
+}
+#floatQueueBtn[hidden] { display: none !important; }
+/* Ikon sudah dirender jadi <svg> oleh lucide.createIcons(), jadi yang
+   disetel ukurannya svg-nya (aturan untuk <i> tidak berlaku lagi). */
+#floatQueueBtn svg {
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  min-height: 18px;
+  pointer-events: none;
+  stroke-width: 2.2;
+}
+#floatQueueBtn span {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: #1ed760;
+  color: #000;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  pointer-events: none;
+}
+#floatQueueBtn span[hidden] { display: none !important; }
+
 @media (max-width: 560px) {
-  .mini-player {
-    right: 8px !important;
-    bottom: 8px !important;
-    width: calc(100vw - 16px) !important;
-    height: 126px !important;
-    min-height: 126px !important;
-    max-height: 126px !important;
-    border-radius: 12px !important;
+  #floatQueueBtn {
+    bottom: 100px;
+    right: 12px;
+    width: 40px;
+    height: 40px;
   }
+}
 
-  .mini-player > #miniFrame {
-    top: 32px !important;
-    height: calc(100% - 32px) !important;
-  }
 
-  .mini-player > #miniLyrics,
-  .mini-player > #miniClose {
-    top: 5px !important;
+/* ---------- Floating Lyric Button (Liquid Glass) ----------
+   Letakkan di KIRI tombol antrean (bottom: 88px, right: 68px).
+   Hanya tampil kalau lagu yang diputar punya lirik tersinkron. */
+#floatLyricBtn {
+  position: fixed;
+  bottom: 100px;
+  right: 68px;
+  z-index: 121;
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(255, 255, 255, .18);
+  border-radius: 50%;
+  background: rgba(18, 18, 18, .55);
+  color: rgba(255, 255, 255, .9);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(18px) saturate(180%);
+  -webkit-backdrop-filter: blur(18px) saturate(180%);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, .4),
+    inset 0 1px 0 rgba(255, 255, 255, .15);
+  transition: background .15s, transform .15s, box-shadow .15s;
+  -webkit-tap-highlight-color: transparent;
+}
+#floatLyricBtn:hover {
+  background: rgba(30, 30, 30, .7);
+  box-shadow:
+    0 6px 20px rgba(0, 0, 0, .5),
+    inset 0 1px 0 rgba(255, 255, 255, .2);
+}
+#floatLyricBtn:active {
+  transform: scale(.94);
+}
+#floatLyricBtn[hidden] { display: none !important; }
+#floatLyricBtn svg {
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  min-height: 18px;
+  pointer-events: none;
+  stroke-width: 2.2;
+}
+
+@media (max-width: 560px) {
+  #floatLyricBtn {
+    bottom: 100px;
+    right: 60px;
+    width: 40px;
+    height: 40px;
   }
+}
+
+/* ---------- Floating Queue Panel (Liquid Glass) ----------
+   Daftar antrean yang muncul saat tombol antrean diklik.
+   Panel ini diposisikan di atas mini player dengan gaya kaca yang sama. */
+#floatQueuePanel {
+  position: fixed;
+  bottom: 152px;
+  right: 16px;
+  z-index: 130;
+  width: min(320px, calc(100vw - 32px));
+  max-height: min(50vh, 420px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 14px;
+  background: rgba(18, 18, 18, .82);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, .5),
+    inset 0 1px 0 rgba(255, 255, 255, .12);
+  overflow: hidden;
+}
+#floatQueuePanel[hidden] { display: none !important; }
+
+.float-queue-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+  flex-shrink: 0;
+}
+.float-queue-head h3 {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #fff;
+}
+.float-queue-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.float-queue-head-actions button {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #b3b3b3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.float-queue-head-actions button:hover { background: rgba(255, 255, 255, .1); color: #fff; }
+.float-queue-count {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, .12);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 22px;
+  text-align: center;
+}
+
+.float-queue-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 8px 10px;
+  -webkit-overflow-scrolling: touch;
+}
+.float-queue-list::-webkit-scrollbar { width: 8px; }
+.float-queue-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, .2);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.float-queue-empty {
+  margin: 0;
+  padding: 24px 14px;
+  color: #b3b3b3;
+  font-size: 13px;
+  text-align: center;
+}
+.float-queue-empty[hidden] { display: none !important; }
+
+@media (max-width: 560px) {
+  #floatQueuePanel {
+    bottom: 148px;
+    right: 12px;
+    left: 12px;
+    width: auto;
+    max-height: 45vh;
+  }
+}
+
+
+/* Baris item di panel antrean floating: judul + artis, dan ✕ untuk hapus. */
+.float-queue-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background .15s;
+}
+.float-queue-item:hover { background: rgba(255, 255, 255, .09); }
+.float-queue-thumb {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  border-radius: 4px;
+  object-fit: cover;
+  background: #282828;
+}
+.float-queue-thumb-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, .4);
+}
+.float-queue-thumb-empty svg {
+  width: 15px;
+  height: 15px;
+  pointer-events: none;
+}
+.float-queue-copy {
+  flex: 1;
+  min-width: 0;
+}
+.float-queue-copy strong,
+.float-queue-copy small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.float-queue-copy strong { font-size: 13.5px; font-weight: 500; color: #fff; }
+.float-queue-copy small { font-size: 12px; color: #b3b3b3; }
+.float-queue-remove {
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #b3b3b3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: .55;
+  transition: opacity .15s, background .15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.float-queue-item:hover .float-queue-remove,
+.float-queue-remove:focus-visible { opacity: 1; }
+.float-queue-remove:hover { background: rgba(255, 255, 255, .12); color: #fff; }
+.float-queue-remove svg {
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+  stroke-width: 2.4;
+}
+
+/* Di layar sentuh tombol hapus selalu terlihat, tidak perlu hover. */
+@media (hover: none) {
+  .float-queue-remove { opacity: 1; }
+}
+
+
+/* ---------- Saat halaman lirik terbuka ----------
+   Layar lirik sudah punya tombol sendiri di bagian atasnya, jadi tombol
+   antrean, tombol lirik, dan panel antrean disembunyikan agar tidak
+   menumpuk di atasnya. */
+html.lyrics-open #floatQueueBtn,
+html.lyrics-open #floatLyricBtn,
+html.lyrics-open #floatQueuePanel {
+  display: none !important;
 }

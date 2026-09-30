@@ -81,7 +81,22 @@
   function readStoredSpdc() {
     var dc = getCookie('sp_dc');
     if (dc && dc.length >= 20) return dc;
-    try { dc = localStorage.getItem('spotifySpdc') || ''; } catch (e) { dc = ''; }
+    try {
+      dc = localStorage.getItem('spotifySpdc') || '';
+      // Normalkan nilai lama yang tersimpan sebagai JSON (metode versi dulu):
+      // JSON.stringify merusak nilai cookie, pulihkan ke bentuk string mentah.
+      if (dc && dc.charAt(0) === '"') {
+        try {
+          var parsed = JSON.parse(dc);
+          if (typeof parsed === 'string') {
+            dc = parsed;
+            localStorage.setItem('spotifySpdc', dc);
+          } else {
+            dc = '';
+          }
+        } catch (e2) { dc = ''; }
+      }
+    } catch (e) { dc = ''; }
     return dc && dc.length >= 20 ? dc : '';
   }
 

@@ -474,6 +474,9 @@ body.modal-open {
 .card:hover .queue-next,
 .card:focus-within .queue-next { opacity: 1; }
 .card .queue-next:hover { background: rgba(255, 255, 255, .1); color: #fff; }
+@media (max-width: 768px) {
+  .card .queue-next { opacity: 1; }
+}
 
 .card.top-card {
   display: flex;
@@ -490,7 +493,16 @@ body.modal-open {
   height: 120px;
   border-radius: 8px;
 }
-.card.top-card .card-body .card-title { font-size: 24px; font-weight: 700; }
+.card.top-card .card-body .card-title {
+  font-size: clamp(16px, 4.5vw, 24px);
+  font-weight: 700;
+  word-break: break-word;
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 .card.top-card .card-meta {
   display: flex;
   align-items: center;
@@ -500,7 +512,11 @@ body.modal-open {
   font-size: 12.5px;
 }
 .card.top-card .queue-next { top: auto; bottom: 14px; right: 14px; transform: none; width: 44px; height: 44px; background: #1ed760; color: #000; }
-.card.top-card:hover .queue-next { opacity: 1; }
+.card.top-card:hover .queue-next,
+.card.top-card:focus-within .queue-next { opacity: 1; }
+@media (max-width: 768px) {
+  .card.top-card .queue-next { opacity: 1; }
+}
 .card.top-card .queue-next:hover { background: #3be477; }
 
 /* Playlist / collection cards (NOT .card to avoid mini-player interception) */

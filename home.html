@@ -14,8 +14,8 @@
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="/static/home.css?v=15">
-  <link rel="stylesheet" href="/static/mini-player-fix.css?v=15">
+  <link rel="stylesheet" href="/static/home.css?v=18">
+  <link rel="stylesheet" href="/static/mini-player-fix.css?v=23">
 </head>
 
 <body class="text-sm">
@@ -97,7 +97,7 @@
     <main class="main-content bg-spotify-base rounded-lg overflow-y-auto relative">
 
       <!-- HOME VIEW -->
-      <div id="viewHome" class="view active p-6 pb-20">
+      <div id="viewHome" class="view active p-6 pb-64">
         <div class="spdc-banner" id="spdcBanner">
           <span>Belum masuk ke Spotify - lagu tidak bisa diputar.</span>
           <button class="banner-btn" id="bannerLogin">Masuk sekarang</button>
@@ -112,7 +112,7 @@
       </div>
 
       <!-- SEARCH VIEW -->
-      <div id="viewSearch" class="view p-6 pb-20">
+      <div id="viewSearch" class="view p-6 pb-64">
         <div class="mb-6 mt-2 flex items-center justify-between">
           <h2 class="text-2xl font-bold text-white tracking-tight" id="searchTitle">Hasil pencarian</h2>
         </div>
@@ -134,7 +134,7 @@
       </div>
 
       <!-- PLAYLIST VIEW -->
-      <div id="viewPlaylist" class="view p-6 pb-20">
+      <div id="viewPlaylist" class="view p-6 pb-64">
         <div class="flex flex-col md:flex-row md:items-end gap-5 mb-8">
           <div id="plCover"
             class="w-40 h-40 md:w-52 md:h-52 rounded-lg shadow-2xl overflow-hidden bg-[#282828] flex items-center justify-center text-white/50 flex-shrink-0">
@@ -171,12 +171,12 @@
         <div class="flex gap-2 text-spotify-subdued flex-shrink-0">
           <button id="queueClear" title="Kosongkan antrean" aria-label="Kosongkan antrean"
             class="hover:text-white hover:bg-spotify-hover w-8 h-8 rounded-full flex items-center justify-center transition-all">
-            <i class="fas fa-trash-can"></i>
+            <i data-lucide="trash-2"></i>
           </button>
         </div>
       </div>
 
-      <div class="flex-1 overflow-y-auto px-4 pb-28">
+      <div class="flex-1 overflow-y-auto px-4 pb-64">
         <div class="w-full rounded-lg overflow-hidden shadow-2xl mb-4 mt-2 relative aspect-square bg-[#282828] group" id="nowCoverWrap">
           <img id="nowCover" src="" alt="Cover" class="w-full h-full object-cover" hidden>
           <div class="absolute inset-0 flex items-center justify-center text-white/40">
@@ -214,7 +214,7 @@
           <p>Tempel cookie <code>sp_dc</code> dari akun Spotify kamu.</p>
         </div>
         <button id="loginClose" type="button" title="Tutup" aria-label="Tutup">
-          <i class="fas fa-xmark"></i>
+          <i data-lucide="x"></i>
         </button>
       </div>
 
@@ -236,27 +236,50 @@
 
   <div id="toast"></div>
 
-  <div class="mini-player" id="miniPlayer" hidden>
-    <img id="miniArtwork" class="mini-artwork" alt="" hidden>
-    <div class="mini-copy">
-      <strong id="miniTitle">Sedang diputar</strong>
-      <span id="miniArtist"></span>
+  <!-- Floating lyric button (liquid glass) - di kiri tombol antrean.
+       Hanya muncul kalau lagu yang sedang diputar punya lirik tersinkron. -->
+  <button id="floatLyricBtn" title="Lirik" aria-label="Buka lirik" hidden>
+    <i data-lucide="mic"></i>
+  </button>
+
+  <!-- Floating queue button (liquid glass) - di atas iframe mini player.
+       Kliknya memunculkan daftar antrean yang bisa dihapus per item,
+       sama seperti panel antrean di halaman lirik. -->
+  <button id="floatQueueBtn" title="Antrean" aria-label="Buka antrean">
+    <i data-lucide="list-music"></i>
+    <span id="floatQueueCount" hidden>0</span>
+  </button>
+
+  <div id="floatQueuePanel" hidden>
+    <div class="float-queue-head">
+      <h3>Antrean berikutnya</h3>
+      <div class="float-queue-head-actions">
+        <span class="float-queue-count" id="floatQueueCount2">0</span>
+        <button id="floatQueueClear" title="Kosongkan antrean" aria-label="Kosongkan antrean">
+          <i class="fas fa-trash-can"></i>
+        </button>
+        <button id="floatQueueClose" title="Tutup" aria-label="Tutup">
+          <i class="fas fa-xmark"></i>
+        </button>
+      </div>
     </div>
-    <button id="miniLyrics" title="Buka lirik" aria-label="Buka lirik">
-      <i data-lucide="file-music"></i>
-    </button>
-    <button id="miniClose" title="Tutup mini player" aria-label="Tutup mini player">
-      <i data-lucide="x"></i>
-    </button>
+    <div class="float-queue-list" id="floatQueueList"></div>
+    <p class="float-queue-empty" id="floatQueueEmpty">Belum ada lagu di antrean.</p>
+  </div>
+
+  <!-- Mini player di home: HANYA iframe embed Spotify. Judul, artis, progress
+       bar, dan tombol play/jeda semuanya kontrol asli dari embed (layout
+       "short" 80px milik Spotify), tanpa bar atau tombol tambahan kita. -->
+  <div class="mini-player" id="miniPlayer" hidden>
     <iframe id="miniFrame" allow="autoplay *; encrypted-media; fullscreen; picture-in-picture; web-share"
       allowfullscreen frameborder="0" loading="eager" title="Mini Spotify Player"></iframe>
   </div>
 
   <script src="https://unpkg.com/lucide@latest"></script>
-  <script src="/static/queue.js?v=15"></script>
-  <script src="/static/home.js?v=15"></script>
-  <script src="/static/playback-fixes.js?v=14"></script>
-  <script src="/static/mini-player-fix.js?v=14"></script>
+  <script src="/static/queue.js?v=16"></script>
+  <script src="/static/home.js?v=18"></script>
+  <script src="/static/playback-fixes.js?v=15"></script>
+  <script src="/static/mini-player-fix.js?v=23"></script>
 </body>
 
 </html>

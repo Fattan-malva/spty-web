@@ -1,15 +1,42 @@
 import asyncio
 import os
+import re
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 
 from . import config, queue_store, services, spdc
 from .config import MAX_LIMIT
 from .mappers import sanitize_track_id
 
 router = APIRouter()
+
+
+# ---------- HTML pages (asset URLs di-cache-busting otomatis) ----------
+
+_PAGE_CACHE: dict[str, str] = {}
+
+
+def _page(filename: str) -> str:
+    """Baca halaman dan ganti ?v=<manual> dengan BUILD_ID.
+
+    Tiap hasil deploy menghasilkan URL asset yang baru, sehingga Safari/iOS
+    dan cache Cloudflare tidak mungkin menyajikan JS/CSS versi lama.
+    """
+    cached = _PAGE_CACHE.get(filename)
+    if cached is not None:
+        return cached
+    path = os.path.join(config.BASE_DIR, filename)
+    with open(path, "r", encoding="utf-8") as handle:
+        html = handle.read()
+    html = re.sub(r"(/static/[A-Za-z0-9._-]+)\?v=[^'\"\s>]+", rf"\1?v={config.BUILD_ID}", html)
+    _PAGE_CACHE[filename] = html
+    return html
+
+
+def _page_headers() -> dict:
+    return {"Cache-Control": "no-store, must-revalidate"}
 
 
 def _require(request: Request, sp_dc_q: Optional[str]) -> str | HTMLResponse:
@@ -32,15 +59,17 @@ async def health(request: Request):
 
 @router.get("/")
 async def root():
-    return FileResponse(os.path.join(config.BASE_DIR, "home.html"), media_type="text/html")
+    return HTMLResponse(_page("home.html"), headers=_page_headers())
 
 
 # ---------- SESSION (per-user sp_dc cookie) ----------
 
 @router.get("/api/session")
-async def get_session(request: Request):
-    sp_dc = request.cookies.get(spdc.SPDC_COOKIE_NAME, "")
-    return {"loggedIn": bool(sp_dc and len(sp_dc) >= 20), "hasSpdc": bool(sp_dc)}
+async def get_session(request: Request, sp_dc: Optional[str] = Query(None)):
+    # Safari/iOS kadang menolak cookie, jadi status sesi juga boleh diverifikasi
+    # lewat query/header sp_dc (sumber kebenaran yang sama dengan endpoint lain).
+    found = spdc.extract_sp_dc(request, sp_dc)
+    return {"loggedIn": bool(found and len(found) >= 20), "hasSpdc": bool(found)}
 
 
 @router.post("/api/session")
@@ -193,10 +222,9 @@ async def embed_proxy(request: Request, trackId: str = Query(...),
     return await services.get_embed_html(request.app, tid, room_sp_dc)
 
 
-@router.get("/player", response_class=FileResponse)
+@router.get("/player")
 async def player():
-    player_path = os.path.join(config.BASE_DIR, "player.html")
-    return FileResponse(player_path, media_type="text/html")
+    return HTMLResponse(_page("player.html"), headers=_page_headers())
 
 
 @router.delete("/cache")

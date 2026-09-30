@@ -490,10 +490,17 @@ async def get_embed_html(app, track_id: str, sp_dc: str) -> HTMLResponse:
 
     html = response.text
     if "</head>" in html:
+        # Samakan dengan embed resmi: container dipaksa terlihat, dan
+        # skeleton serta tombol "Save on Spotify" disembunyikan. Tanpa ini
+        # lapisan skeleton masih menutupi widget dan tombol play bisa ada di
+        # DOM tapi tidak bisa dipakai.
         html = html.replace(
             "</head>",
             '<style>'
             '[data-testid="embed-widget-container"]{opacity:1 !important}'
+            '[data-testid="embed-widget-skeleton"],'
+            '[data-testid="skeleton"],'
+            '[data-testid="save-on-spotify"]{display:none !important}'
             '</style>'
             '</head>',
             1

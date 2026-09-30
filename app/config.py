@@ -71,6 +71,12 @@ MAX_EMBED_CACHE = int(os.getenv("MAX_EMBED_CACHE", "500"))
 MAX_LYRICS_CACHE = int(os.getenv("MAX_LYRICS_CACHE", "1000"))
 MAX_LIMIT = 50
 
+# Token versi asset frontend. Nilainya berubah setiap container start, jadi
+# URL /static/...?v=BUILD_ID selalu baru setelah deploy. Tanpa ini, Safari/iOS
+# dan cache Cloudflare bisa tetap menyajikan JS/CSS versi lama selama berjam-jam
+# sehingga perbaikan tidak pernah terlihat pengguna.
+BUILD_ID = str(int(time.time()))
+
 SEARCH_CACHE: OrderedDict[str, dict] = OrderedDict()
 TRACK_META_CACHE: OrderedDict[str, dict] = OrderedDict()
 EMBED_CACHE: OrderedDict[str, dict] = OrderedDict()
